@@ -1,0 +1,7 @@
+# Build output and test artifacts (regenerated, never committed)
+qt/build/
+web/dist/
+web/shots/
+node_modules/
+*.tar
+.DS_Store
