@@ -68,7 +68,7 @@ void Game::loadMap(int index) {
 
     // Fresh start on this map: coins reset, no plants or bugs. Lives are kept.
     phase = Phase::Build;
-    coins = map().startCoins;
+    coins = startCoins();
     wave = 0;
     totalWaves = int(waves().size());
     time = 0;
@@ -291,7 +291,7 @@ void Game::spawnEnemy(data::EnemyType type, double hpMult) {
         addEffect(EffectKind::BossDust, std::max(e.x, TILE * 0.5), e.y, 46);
         emit bugSound(QStringLiteral("boss_rumble"));
     }
-    e.hp = e.maxHp = def.hp * hpMult * map().hpMult;
+    e.hp = e.maxHp = def.hp * hpMult * map().hpMult * difficultyHpMult();
     e.dist = 0;
     e.slowUntil = 0;
     e.slowFactor = 0;
@@ -741,6 +741,40 @@ int Game::damageOf(const Tower &t) const {
 }
 
 // ---------- Focus fire ----------
+
+// ---------- Difficulty ----------
+
+// Hard ramps in: bug HP is normal on maps 1-2 and x1.15 from map 3 (avoids an early wall).
+constexpr bool HARD_RAMP = true;
+
+double Game::difficultyHpMult() const {
+    switch (difficulty) {
+    case Difficulty::Easy: return 0.75;
+    case Difficulty::Hard: return HARD_RAMP && mapIndex < 2 ? 1.0 : 1.15;   // no early wall
+    case Difficulty::Normal: break;
+    }
+    return 1.0;
+}
+
+double Game::difficultyCoinMult() const {
+    switch (difficulty) {
+    case Difficulty::Easy: return 1.25;
+    case Difficulty::Hard: return 0.9;
+    case Difficulty::Normal: break;
+    }
+    return 1.0;
+}
+
+int Game::startCoins() const {
+    if (difficulty == Difficulty::Normal) return map().startCoins;   // exactly the tuned value
+    return int(std::lround(map().startCoins * difficultyCoinMult()));
+}
+
+void Game::setDifficulty(Difficulty d) {
+    difficulty = d;
+    // Picked on the intro card / before the first wave: give the right start coins now.
+    if (phase == Phase::Build && wave == 0 && towers.empty()) coins = startCoins();
+}
 
 bool Game::focusFire(const std::vector<int> &towerIds, int enemyId) {
     if (isOver() || !findEnemy(enemyId)) return false;

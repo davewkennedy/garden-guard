@@ -45,6 +45,9 @@ All Session A features are integrated and passing. Remaining time goes to polish
 - 17:24 claude2-63: real-app smoke tests on maps 5-10: all exit 0, mechanics verified in-app.
 - 17:24 In progress: claude2-de making waves 4-5 the climax on maps 6-10 (keep or revert by 17:31). Then FINAL BUILD -> re-sweep (claude2-0c) + showcase refresh (claude2-3e) -> wrap-up.
 
+- 17:25 claude2-de: waves 4-5 on maps 6-10 are now the climax (x1.3 swarms, x1.1 hp); autopilot still wins (6 lives).
+- 17:26 **FINAL BUILD:** 0 warnings, simtest 82/82 PASS, autopilot wins all 10 maps (lives 20/20/20/18/18/16/14/14/12/won with 6). Snapshot `garden-plusplus-4-final.tar`. Final crash sweep (claude2-0c) + showcase refresh (claude2-3e) running; summary to the user follows.
+
 ## Backlog (next tasks as helpers free up)
 1. Snow slows bugs on winter maps (a MapDef speed multiplier), and frost a bit weaker there (claude2-de)
 2. Side panel height with 11 plants (shop 3 columns, or a scroll area)

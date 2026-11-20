@@ -13,6 +13,9 @@
 // MapCleared: all waves on this map beaten, waiting for nextMap(). Won: whole campaign beaten.
 enum class Phase { Build, Wave, MapCleared, Won, Lost };
 
+// Campaign difficulty: scales bug HP and each map's start coins. Normal changes nothing.
+enum class Difficulty { Easy, Normal, Hard };
+
 struct Enemy {
     int id;
     data::EnemyType type;
@@ -156,6 +159,15 @@ public:
 
     // Plant unlocks (claude2-0c): a plant is available from its TowerDef::unlockMap on. Derived
     // from mapIndex, so reset(0) relocks and reset(N) unlocks everything up to map N.
+    // Difficulty (Easy: bug HP x0.75, start coins x1.25; Hard: coins x0.9, bug HP x1.0 on
+    // maps 1-2 then x1.15 from map 3, so there's no early wall).
+    // Applied when bugs spawn and when a map loads; Normal is exactly the tuned game.
+    Difficulty difficulty = Difficulty::Normal;
+    void setDifficulty(Difficulty d);  // also re-applies start coins if nothing is planted yet
+    double difficultyHpMult() const;
+    double difficultyCoinMult() const;
+    int startCoins() const;            // this map's start coins at the current difficulty
+
     bool unlockAll = false;            // test/debug override: every plant available
     bool isUnlocked(int type) const {
         return type >= 0 && type < int(data::TOWERS.size()) && (unlockAll || data::TOWERS[type].unlockMap <= mapIndex);

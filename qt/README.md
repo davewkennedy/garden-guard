@@ -109,6 +109,7 @@ Flyers are drawn above the ground with a shadow. 🎃 splash and 🌶️ flames 
 - **Boss warning** toast, a dust burst at the nest, and a boss HP bar with one segment per snail.
 - **Stars** per map: ★★★ no lives lost, ★★ 3 or fewer, ★ cleared. Best stars are saved.
 - **Intro card**: personal best, total stars, **Continue from <map>**, and **🗺️ Choose map**. Choose map lists every map you've reached, with its season and best stars, plus a **Play** button that starts a fresh run there with full lives and that map's plants unlocked.
+- **Difficulty** (intro card): 🌱 Easy (bugs −25% HP, start coins +25%) · 🌿 Normal · 🌳 Hard (bugs +30% HP, start coins −10%). It's saved between sessions, applies to every new run (Let's grow, Continue, Choose map, Play again), and is shown in the window title and on the end card.
 - **📖 Garden Journal** (`J`): every bug met so far (HP, speed, armor, reward, and flying / boss / wildcard tags) and every plant unlocked so far (with its counter tip). Unmet entries show as `???` teasers. The game pauses while it's open.
 - **Confetti** on map clears and on the win; **run stats** on the end card.
 - The 🤖 **autopilot** is lane-aware and builds anti-air on maps with sky lanes.

@@ -406,6 +406,57 @@ int main(int argc, char *argv[]) {
         std::printf("    autopilot result: %s\n", g.phase == Phase::Won ? "won the campaign" : "lost");
     }
 
+    // D) Difficulty: the same autopilot on Easy / Normal / Hard. Easy must end with at
+    //    least Normal's lives; Hard must end worse (fewer lives, or a loss).
+    {
+        std::printf("Test D: difficulty modes\n");
+        struct Result { bool won; int lives, map, wave; std::string perMap; };
+        auto play = [](Difficulty d) {
+            Game g;
+            g.setDifficulty(d);
+            Autopilot ai(g);
+            Result r{false, 0, 0, 0, {}};
+            auto runFor = [&](double seconds) {
+                for (int i = 0; i < int(seconds * 60); i++) {
+                    if (i % 30 == 0) ai.think();
+                    g.update(1.0 / 60);
+                }
+            };
+            while (true) {
+                while (g.phase == Phase::Build) {
+                    runFor(1.0);
+                    if (!g.startWave()) break;
+                    for (int i = 0; i < 600 && g.phase == Phase::Wave; i++) runFor(1.0);
+                }
+                r.perMap += (r.perMap.empty() ? "" : "/") + std::to_string(g.lives);
+                if (g.phase != Phase::MapCleared) break;
+                g.nextMap();
+            }
+            r.won = g.phase == Phase::Won;
+            r.lives = g.lives;
+            r.map = g.mapIndex + 1;
+            r.wave = g.wave;
+            return r;
+        };
+        const char *names[] = {"Easy", "Normal", "Hard"};
+        Result res[3];
+        for (int i = 0; i < 3; i++) {
+            res[i] = play(Difficulty(i));
+            std::printf("    %-6s lives %s -> %s", names[i], res[i].perMap.c_str(), res[i].won ? "WON" : "LOST");
+            if (!res[i].won) std::printf(" on map %d wave %d", res[i].map, res[i].wave);
+            std::printf("\n");
+        }
+        Game probe;
+        probe.setDifficulty(Difficulty::Easy);
+        const bool coinsOk = probe.coins == int(std::lround(data::MAPS[0].startCoins * 1.25));
+        probe.setDifficulty(Difficulty::Normal);
+        ok &= check(coinsOk && probe.coins == data::MAPS[0].startCoins, "setDifficulty re-applies start coins");
+        ok &= check(res[1].won, "Normal is still won by the autopilot");
+        ok &= check(res[0].won && res[0].lives >= res[1].lives, "Easy ends with at least Normal's lives");
+        ok &= check(res[2].won ? res[2].lives < res[1].lives : res[2].map >= 5,
+                    "Hard ends worse than Normal (fewer lives, or a loss no earlier than map 5)");
+    }
+
     // F) Focus fire: plants gang up on the chosen bug, ambushers leave their zone
     //    (without the bonus), and everyone reverts once the bug is gone.
     {

@@ -201,6 +201,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     }
     buildMapSelect();
     buildJournal();
+    buildDifficultyPicker();
     end_ = buildOverlay(endTitle_, endText_, again);
     again->setText("Play again");
     connect(again, &QPushButton::clicked, this, &MainWindow::playAgain);
@@ -995,6 +996,7 @@ void MainWindow::showEnd(bool won) {
     endText_->setText(endText_->text() +
                       QString("\n\n🐜 %1 bugs squashed   🌱 %2 plants planted\n🎯 %3 shots fired   %4 %5 coins earned")
                           .arg(runKills_).arg(runPlanted_).arg(runShots_).arg(COIN).arg(runCoins_));
+    endText_->setText(endText_->text() + QString("\nDifficulty: %1").arg(difficultyLabel()));
     end_->show();
     end_->raise();
     end_->findChild<QPushButton *>()->setFocus();
@@ -1050,6 +1052,7 @@ void MainWindow::startRunAt(int map) {
     sfx("click");
     runKills_ = runPlanted_ = runShots_ = runCoins_ = 0;
     runStars_.clear();
+    applyDifficulty();   // the chosen difficulty applies to the new run
     game_.reset(map);
     clearView();
     setUserPaused(false);
@@ -1277,6 +1280,7 @@ bool MainWindow::setupScene(const QString &scene_) {
 void MainWindow::playAgain() {
     runKills_ = runPlanted_ = runShots_ = runCoins_ = 0;
     runStars_.clear();
+    applyDifficulty();   // the difficulty persists anyway; re-applied so it matches the saved choice
     game_.reset();
     clearView();
     setUserPaused(false);

@@ -132,6 +132,11 @@ private:
     void buildJournal();
     void fillJournal();
     void toggleJournal();   // header 📖 button / J key
+    // Difficulty picker on the intro card (difficulty.cpp): 0 Easy, 1 Normal, 2 Hard.
+    int difficulty_ = 1;
+    void buildDifficultyPicker();
+    void applyDifficulty();          // before each run starts; also sets the window title
+    QString difficultyLabel() const; // "🌳 Hard"
     QLabel *endTitle_ = nullptr, *endText_ = nullptr;
     QLabel *nextTitle_ = nullptr, *nextText_ = nullptr;
     QPushButton *nextBtn_ = nullptr;
