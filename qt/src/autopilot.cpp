@@ -44,9 +44,10 @@ Autopilot::Autopilot(Game &game) : g_(game) {
                            "rose", "clover", "corn", "corn", "frost", "sprout"})
         plan_.push_back(typeOf(id));
     // Maps with flyers: lead with plants that can hit the air (mortars and chilis can't).
-    // Grape vines (claude2-0c) ground flyers on the lanes so the splash plants can join in.
-    for (const char *id : {"sprout", "corn", "grape", "sprout", "frost", "corn", "mushroom", "mortar",
-                           "rose", "cactus", "corn", "grape", "clover", "chili", "mortar", "rose",
+    // One grape vine (claude2-0c) once splash is down: it grounds flyers on the lanes so mortars
+    // and chilis can hit them. Simtest sweep: earlier or extra vines cost too much damage.
+    for (const char *id : {"sprout", "corn", "sprout", "frost", "corn", "mushroom", "mortar",
+                           "rose", "cactus", "corn", "clover", "chili", "grape", "mortar", "rose",
                            "cactus", "mushroom", "clover", "frost", "chili", "sprout"})
         airPlan_.push_back(typeOf(id));
 }

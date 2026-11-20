@@ -204,6 +204,38 @@ int main(int argc, char *argv[]) {
         ok &= check(finale, "the finale's last wave brings at least 2 snails");
     }
 
+    // S) Winter snow: on winter maps ground bugs walk at bugSpeedMult of their speed.
+    {
+        std::printf("Test S: winter snow slows ground bugs\n");
+        bool winterOk = true;
+        for (int m = 0; m < int(data::MAPS.size()); m++) {
+            const bool winter = data::MAPS[m].season == data::Season::Winter;
+            winterOk &= winter ? data::MAPS[m].bugSpeedMult < 1 && data::MAPS[m].frostMult < 1
+                               : data::MAPS[m].bugSpeedMult == 1 && data::MAPS[m].frostMult == 1;
+        }
+        // Measure the first ground bug's pace on the first winter map (no plants, no slows).
+        double measured = 0, expected = 0;
+        for (int m = 0; m < int(data::MAPS.size()) && expected == 0; m++) {
+            if (data::MAPS[m].bugSpeedMult >= 1) continue;
+            Game g;
+            g.reset(m);
+            g.startWave();
+            for (int i = 0; i < 60 * 30 && g.enemies.empty(); i++) g.update(1.0 / 60);
+            if (g.enemies.empty()) break;
+            const int id = g.enemies.front().id;
+            const auto &def = data::ENEMIES[g.enemies.front().type];
+            if (def.flying || def.hopEvery > 0) break;
+            const double d0 = g.enemies.front().dist;
+            for (int i = 0; i < 60; i++) g.update(1.0 / 60);   // one second
+            for (const Enemy &e : g.enemies)
+                if (e.id == id) measured = e.dist - d0;
+            expected = def.speed * data::TILE * data::MAPS[m].bugSpeedMult;
+        }
+        std::printf("    first winter map: walked %.1f px in 1 s, expected %.1f\n", measured, expected);
+        ok &= check(winterOk, "winter maps (and only they) have snow and weaker frost");
+        ok &= check(expected > 0 && std::abs(measured - expected) < 2, "snow slows ground bugs by bugSpeedMult");
+    }
+
     // U) Plant unlocks (drafted by claude2-0c): locked plants can't be placed, and
     //    each map's new plants unlock there.
     {

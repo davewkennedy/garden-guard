@@ -4,6 +4,7 @@
 #include "data.h"
 
 #include <QFormLayout>
+#include <map>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -60,7 +61,7 @@ QPushButton[kind="big"] { font-size: 16px; font-weight: 700; min-height: 40px; }
 #shopItem[fresh="true"] { border-color: #f2b705; background: #fff8dc; }
 #shopNew {
   background: #f2b705; color: #ffffff; border-radius: 6px;
-  font-size: 10px; font-weight: 800; padding: 0 4px;
+  font-size: 9px; font-weight: 800; padding: 0 3px;
 }
 #shopIcon { font-size: 24px; }
 #shopName { font-weight: 700; font-size: 12px; }
@@ -119,7 +120,7 @@ void setTextIfChanged(QAbstractButton *b, const QString &text) {
 }  // namespace
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
-    setWindowTitle("Garden Guard+");
+    setWindowTitle("Garden Guard++");
     setStyleSheet(STYLE);
 
     auto *central = new QWidget;
@@ -151,7 +152,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     QLabel *introTitle, *introText;
     QPushButton *startGame, *again;
     intro_ = buildOverlay(introTitle, introText, startGame);
-    introTitle->setText("Garden Guard+");
+    introTitle->setText("Garden Guard++");
     introText->setText(QString("Bugs are marching on your house! Plant defenders beside the path to "
                                "stop them, and upgrade them with the coins you earn. Survive %1 waves "
                                "in each of %2 gardens. New bugs (even flying ones!) appear as you go, "
@@ -288,7 +289,7 @@ QWidget *MainWindow::buildHeader() {
     auto *h = new QHBoxLayout(header);
     h->setContentsMargins(0, 0, 0, 0);
     h->setSpacing(10);
-    h->addWidget(label("Garden Guard+", "title"));
+    h->addWidget(label("Garden Guard++", "title"));
     h->addStretch(1);
     map_ = label({}, "stat");
     coins_ = label({}, "stat");
@@ -323,7 +324,7 @@ QPushButton *MainWindow::makeShopItem(int type, int index) {
     const data::TowerDef &def = data::TOWERS[type];
     auto *b = button({}, {}, "shopItem");
     b->setCheckable(true);
-    b->setMinimumHeight(58);
+    b->setMinimumHeight(52);
     // Keys 1-9, then 0 and - for the tenth and eleventh plants.
     const QString key = index < 9 ? QString::number(index + 1) : index == 9 ? "0" : index == 10 ? "-" : "";
     const bool groundOnly = def.projectile == data::Projectile::Mortar || def.projectile == data::Projectile::Flame;
@@ -340,11 +341,17 @@ QPushButton *MainWindow::makeShopItem(int type, int index) {
     g->addWidget(label(def.icon, "shopIcon"), 0, 0);
     g->addWidget(label(COIN + " " + QString::number(def.levels[0].cost), "shopCost"), 0, 1);
     if (!key.isEmpty()) g->addWidget(label(key, "shopKey"), 0, 2, Qt::AlignRight | Qt::AlignTop);
-    // Plants unlocked on this very map get a NEW badge and a golden border (claude2-0c).
+    // Plants unlocked on this very map get a NEW ribbon and a golden border (claude2-0c). The
+    // ribbon floats over the card's top-left corner, outside the layout, so it takes no width
+    // from the cost, key or name.
     const bool fresh = game_.mapIndex > 0 && def.unlockMap == game_.mapIndex && !game_.unlockAll;
-    g->addWidget(label(def.name, "shopName"), 1, 0, 1, fresh ? 2 : 3);
+    g->addWidget(label(def.name, "shopName"), 1, 0, 1, 3);
     if (fresh) {
-        g->addWidget(label("NEW", "shopNew"), 1, 2, Qt::AlignRight | Qt::AlignBottom);
+        QLabel *ribbon = label("NEW", "shopNew");
+        ribbon->setParent(b);
+        ribbon->adjustSize();
+        ribbon->move(2, 0);
+        ribbon->raise();
         b->setProperty("fresh", true);
         b->setToolTip(b->toolTip() + "<br><b>✨ New plant!</b> " + def.counters.toHtmlEscaped());
     }
@@ -384,7 +391,7 @@ QWidget *MainWindow::buildSide() {
 
     v->addWidget(label("Plants", "sideTitle"));
     shopGrid_ = new QGridLayout;   // filled by rebuildShop() on the first syncUi
-    shopGrid_->setSpacing(8);
+    shopGrid_->setSpacing(6);
     v->addLayout(shopGrid_);
 
     // Tower panel (shown while a planted tower is selected).
@@ -1088,7 +1095,7 @@ bool MainWindow::setupScene(const QString &scene_) {
         return true;
     }
     const QStringList known = {"play", "placing", "mapclear", "win", "lose", "night", "celebrate", "bugs",
-                               "aim", "newbugs"};
+                               "aim", "newbugs", "focus"};
     if (!known.contains(scene)) return false;
     intro_->hide();
 
@@ -1133,6 +1140,29 @@ bool MainWindow::setupScene(const QString &scene_) {
     if (scene == "celebrate") {
         // Fire the confetti shortly before the screenshot (taken at 800ms) so it's mid-air.
         QTimer::singleShot(300, this, [this] { board_->celebrate(); });
+    } else if (scene == "focus") {
+        // Double-click selection of every sprout, focus-firing the bug furthest along.
+        // Select the most common attacking plant type (the staged sprout may not exist on every map).
+        std::map<int, int> count;
+        for (const Tower &o : game_.towers) {
+            auto k = data::TOWERS[o.type].projectile;
+            if (k != data::Projectile::None && k != data::Projectile::Aura) count[o.type]++;
+        }
+        int type = -1, best = 0;
+        for (auto [ty, n] : count) if (n > best) { best = n; type = ty; }
+        for (const Tower &o : game_.towers)
+            if (o.type == type) {
+                board_->view.group.push_back(o.id);
+                board_->view.selectedId = o.id;
+            }
+        // Target the bug closest to the selected plant (it will stay on screen for the shot).
+        const Tower *sel = game_.getTower(board_->view.selectedId);
+        const Enemy *lead = nullptr;
+        for (const Enemy &e : game_.enemies)
+            if (sel && (!lead || std::hypot(e.x - sel->x, e.y - sel->y) < std::hypot(lead->x - sel->x, lead->y - sel->y)))
+                lead = &e;
+        setUserPaused(true);   // freeze the moment for the screenshot
+        if (lead) game_.focusFire(board_->view.group, lead->id);
     } else if (scene == "aim") {
         // The cactus is choosing a fire point; the sprout already has one.
         board_->view.selectedId = cactus;

@@ -143,6 +143,7 @@ public:
     bool isOver() const { return phase == Phase::MapCleared || phase == Phase::Won || phase == Phase::Lost; }
     bool isPathTile(int col, int row) const;
     bool canPlace(int col, int row) const;
+    int terrainAt(int col, int row) const;   // data::TERRAIN_* kind, or -1 for plain grass/path
     Tower *towerAt(int col, int row);
     Tower *getTower(int id);
 
@@ -243,6 +244,7 @@ private:
 
     std::vector<double> segLen_, segStart_;
     double pathLength_ = 0;
+    std::vector<int> terrain_;                   // cols * rows, -1 = none
     std::vector<bool> pathTiles_;                // COLS * ROWS
     double leakX_ = 0, leakY_ = 0;
     std::vector<Spawner> spawners_;

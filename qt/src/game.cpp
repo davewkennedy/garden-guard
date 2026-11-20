@@ -128,6 +128,13 @@ void Game::loadMap(int index) {
         }
     }
 
+    // Terrain (rocks, ponds, lily pads). Path tiles stay path.
+    terrain_.assign(cols * rows, -1);
+    for (const auto &t : map().terrain) {
+        int c = t[0], r = t[1];
+        if (c >= 0 && c < cols && r >= 0 && r < rows && !pathTiles_[r * cols + c]) terrain_[r * cols + c] = t[2];
+    }
+
     // Leak effects appear at the path end, pulled onto the visible board.
     const QPointF &last = path.back();
     leakX_ = std::clamp(last.x(), TILE / 2, W - TILE / 2);
@@ -166,8 +173,15 @@ bool Game::isPathTile(int col, int row) const {
 bool Game::canPlace(int col, int row) const {
     if (col < 0 || col >= cols || row < 0 || row >= rows) return false;
     if (isPathTile(col, row)) return false;
+    const int k = terrainAt(col, row);
+    if (k == data::TERRAIN_ROCK || k == data::TERRAIN_WATER) return false;   // lily pads are fine
     return std::none_of(towers.begin(), towers.end(),
                         [&](const Tower &t) { return t.col == col && t.row == row; });
+}
+
+int Game::terrainAt(int col, int row) const {
+    if (col < 0 || col >= cols || row < 0 || row >= rows || terrain_.empty()) return -1;
+    return terrain_[row * cols + col];
 }
 
 Tower *Game::towerAt(int col, int row) {
@@ -487,7 +501,8 @@ void Game::updateEnemies(double dt) {
         if (def.wild) {
             arrived = steerWildBat(e, dt, mult);
         } else {
-            e.dist += def.speed * TILE * mult * dt;
+            const double snow = def.flying ? 1.0 : map().bugSpeedMult;   // deep snow slows walkers
+            e.dist += def.speed * TILE * mult * snow * dt;
             arrived = e.dist >= routeLength(e);
         }
 
@@ -573,7 +588,7 @@ void Game::applySlow(Enemy &e, double slow, double slowTime) {
     if (!e.alive || slow <= 0) return;
     const data::EnemyDef &def = data::ENEMIES[e.type];
     double active = time < e.slowUntil ? e.slowFactor : 0;
-    e.slowFactor = std::max(active, slow * (1 - def.slowResist));
+    e.slowFactor = std::max(active, slow * map().frostMult * (1 - def.slowResist));
     e.slowUntil = time + slowTime;
     addEffect(EffectKind::Slow, e.x, e.y);
 }

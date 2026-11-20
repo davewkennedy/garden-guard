@@ -10,7 +10,7 @@ int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     // Used by QSettings to remember the sound on/off choice.
     QApplication::setOrganizationName("GardenGuard");
-    QApplication::setApplicationName("Garden Guard Plus");   // separate settings from the original
+    QApplication::setApplicationName("Garden Guard PlusPlus");   // separate settings from the original
 
     // Hidden developer options (not listed in --help):
     //   --screenshot FILE   save an image of the window and quit

@@ -19,6 +19,8 @@ constexpr double TILE = data::TILE;
 double W = 960;   // current board size in logical px (set per map in setupScale)
 double H = 640;
 int GRID_COLS = 15, GRID_ROWS = 10;   // current map grid (set per map in setupScale)
+// Readability boost on big boards (set in setupScale): markers/text, plants, bugs.
+double FX_UI = 1, FX_PLANT = 1, FX_BUG = 1;
 
 constexpr double GLYPH_PAD = 1.3;     // glyph image is this much bigger than the font size
 constexpr double KICK_TIME = 0.16;    // tower shot "kick" duration (s)
@@ -157,6 +159,11 @@ void Renderer::setupScale(double scale, const Game &game) {
     H = game.H;
     GRID_COLS = game.cols;
     GRID_ROWS = game.rows;
+    // Big boards are shown smaller: grow sprites and markers gently so they stay readable,
+    // capped so plants stay within ~0.8 tile and bugs ~0.75 tile.
+    FX_UI = std::clamp(std::sqrt(W / 960.0), 1.0, 1.5);
+    FX_PLANT = std::min(FX_UI, 0.8 / (2 * POT_R / TILE));
+    FX_BUG = std::min(FX_UI, 0.75 / (ENEMY_SIZE / TILE));
     // Round to quarter steps so window resizing doesn't rebuild the caches constantly.
     // Big boards are drawn at a small scale; allow down to 0.25 so caches stay sharp enough.
     double want = std::clamp(std::round(scale * 4) / 4, 0.25, 4.0);
@@ -291,6 +298,101 @@ QPixmap Renderer::buildBackground(const Game &game) {
     }
     }
 
+    // Terrain: ponds (merged into blobs, icy in winter), lily pads, boulders.
+    {
+        Rng trand(map.seed ^ 0x7E44A1Du);
+        const bool icy = season == data::Season::Winter;
+        QPainterPath pond;
+        std::vector<QPointF> lilies, rocks;
+        for (int r = 0; r < game.rows; r++)
+            for (int c = 0; c < game.cols; c++) {
+                const int k = game.terrainAt(c, r);
+                const QPointF ctr(c * TILE + TILE / 2, r * TILE + TILE / 2);
+                if (k == data::TERRAIN_WATER || k == data::TERRAIN_LILY) {
+                    QPainterPath tile;   // solid inset tiles; the thick round-join outline rounds the blob
+                    tile.addRect(QRectF(c * TILE + 8, r * TILE + 8, TILE - 16, TILE - 16));
+                    QPainterPath grow;   // bridge to the right/down neighbours so tiles merge seamlessly
+                    auto isPond = [&](int cc, int rr) {
+                        int kk = game.terrainAt(cc, rr);
+                        return kk == data::TERRAIN_WATER || kk == data::TERRAIN_LILY;
+                    };
+                    if (isPond(c + 1, r)) grow.addRect(QRectF(c * TILE + 8, r * TILE + 8, TILE, TILE - 16));
+                    if (isPond(c, r + 1)) grow.addRect(QRectF(c * TILE + 8, r * TILE + 8, TILE - 16, TILE));
+                    if (isPond(c + 1, r) && isPond(c, r + 1) && isPond(c + 1, r + 1))
+                        grow.addRect(QRectF(c * TILE + 8, r * TILE + 8, TILE, TILE));
+                    pond = pond.united(tile).united(grow);
+                    if (k == data::TERRAIN_LILY) lilies.push_back(ctr);
+                } else if (k == data::TERRAIN_ROCK) {
+                    rocks.push_back(ctr);
+                }
+            }
+        if (!pond.isEmpty()) {
+            pond = pond.simplified();
+            const QRectF b = pond.boundingRect().adjusted(-12, -12, 12, 12);
+            QLinearGradient water(b.topLeft(), b.bottomRight());
+            water.setColorAt(0, icy ? QColor("#e4f2fa") : QColor("#5fb3d9"));
+            water.setColorAt(1, icy ? QColor("#bcd9ea") : QColor("#3b8fbf"));
+            // Bank, then water: thick round-join strokes grow the inset blob by ~8 px with rounded corners.
+            g.setBrush(Qt::NoBrush);
+            g.setPen(QPen(icy ? QColor("#8fb4c8") : QColor("#3d7f6a"), 22, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            g.drawPath(pond);
+            g.setPen(QPen(QBrush(water), 16, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            g.setBrush(water);
+            g.drawPath(pond);
+            QPainterPathStroker grow;
+            grow.setWidth(16);
+            grow.setJoinStyle(Qt::RoundJoin);
+            const QPainterPath full = pond.united(grow.createStroke(pond));
+            g.save();
+            g.setClipPath(full);
+            for (int i = 0; i < int(b.width() * b.height() / 1400); i++) {
+                const double x = b.left() + trand() * b.width(), y = b.top() + trand() * b.height();
+                if (icy) {   // white streaks and a crack or two
+                    g.setPen(roundPen(rgba(255, 255, 255, 0.7), 1.5));
+                    g.drawLine(QPointF(x, y), QPointF(x + 10 + trand() * 12, y - 4 - trand() * 4));
+                } else {     // gentle ripples
+                    g.setPen(roundPen(rgba(220, 245, 255, 0.55), 1.4));
+                    g.drawArc(QRectF(x - 9, y - 3, 18, 7), 20 * 16, 140 * 16);
+                }
+            }
+            g.restore();
+        }
+        for (const QPointF &c : lilies) {
+            // A lily pad: green disc with a notch, a darker vein, sometimes a pink flower.
+            const double R = TILE * 0.36, rot = trand() * 360;
+            g.setPen(QPen(QColor("#2f7a2f"), 1.5));
+            g.setBrush(icy ? QColor("#7fae7a") : QColor("#58b04a"));
+            g.drawPie(QRectF(c.x() - R, c.y() - R, 2 * R, 2 * R), int(rot * 16), int(320 * 16));
+            g.setPen(roundPen(rgba(30, 90, 30, 0.5), 1.2));
+            const double a = (rot + 160) * M_PI / 180;
+            g.drawLine(c, QPointF(c.x() + std::cos(a) * R * 0.8, c.y() - std::sin(a) * R * 0.8));
+            if (!icy && trand() < 0.5) {
+                const QPointF f(c.x() + R * 0.35, c.y() - R * 0.3);
+                for (int k = 0; k < 5; k++) {
+                    double pa = k * 2 * M_PI / 5;
+                    fillCircle(g, f.x() + std::cos(pa) * 3.2, f.y() + std::sin(pa) * 3.2, 2.8, QColor("#f7a8c8"));
+                }
+                fillCircle(g, f.x(), f.y(), 2, QColor("#ffe066"));
+            }
+        }
+        for (const QPointF &c : rocks) {
+            // A boulder: shadow, two or three grey stones with a highlight.
+            fillEllipse(g, c.x() + 3, c.y() + 12, TILE * 0.38, TILE * 0.14, 0, rgba(0, 0, 0, 0.22));
+            const int n = 2 + int(trand() * 2);
+            for (int k = 0; k < n; k++) {
+                const double ox = (k - (n - 1) / 2.0) * 13 + (trand() - 0.5) * 6;
+                const double oy = (trand() - 0.5) * 8 + (k == 1 ? -4 : 2);
+                const double rx = 13 + trand() * 6 - k * 1.5, ry = 10 + trand() * 4 - k;
+                const int shade = 120 + int(trand() * 40);
+                g.setPen(QPen(QColor(70, 70, 75), 1.4));
+                g.setBrush(icy ? QColor(shade + 50, shade + 58, shade + 68) : QColor(shade, shade, shade + 6));
+                g.drawEllipse(QPointF(c.x() + ox, c.y() + oy), rx, ry);
+                fillEllipse(g, c.x() + ox - rx * 0.3, c.y() + oy - ry * 0.4, rx * 0.35, ry * 0.25, 0,
+                            rgba(255, 255, 255, icy ? 0.75 : 0.4));
+            }
+        }
+    }
+
     // Dirt path.
     const std::vector<QPointF> &pathPts = game.path;
     QPainterPath route(pathPts[0]);
@@ -343,7 +445,7 @@ QPixmap Renderer::buildBackground(const Game &game) {
             double roll = rand();
             double cx = c * TILE + 12 + rand() * (TILE - 24);
             double cy = r * TILE + 12 + rand() * (TILE - 24);
-            if (game.isPathTile(c, r)) continue;
+            if (game.isPathTile(c, r) || game.terrainAt(c, r) >= 0) continue;   // no flowers on ponds/rocks
 
             if (roll < 0.17 && season == data::Season::Winter) {   // snow drift instead of flowers
                 drawSnowPatch(g, cx, cy, TILE * (0.18 + rand() * 0.14), TILE * (0.1 + rand() * 0.06));
@@ -406,7 +508,7 @@ QPixmap Renderer::buildBackground(const Game &game) {
                 const double roll = srand();
                 const double cx = c * TILE + TILE * (0.15 + srand() * 0.7);
                 const double cy = r * TILE + TILE * (0.15 + srand() * 0.7);
-                const bool onPath = game.isPathTile(c, r);
+                const bool onPath = game.isPathTile(c, r) || game.terrainAt(c, r) >= 0;
                 if (season == data::Season::Spring) {
                     if (onPath || roll > 0.16) continue;
                     // A drift of fallen blossom petals.
@@ -526,7 +628,7 @@ void Renderer::drawWeather(QPainter &p, const Game &g) {
             double x = std::fmod(i * 97.0 + TILE * 0.25 * std::sin(t * 0.7 + phase) + t * TILE * 0.1, W);
             double y = std::fmod(i * 53.0 + t * fall, H + 10) - 5;
             if (x < 0) x += W;
-            double r = TILE * (0.018 + (i % 3) * 0.009);
+            double r = TILE * (0.025 + (i % 3) * 0.012);
             p.setBrush(rgba(255, 255, 255, 0.5 + 0.12 * (i % 3)));
             p.drawEllipse(QPointF(x, y), r, r);
         }
@@ -598,6 +700,11 @@ void Renderer::drawTowers(QPainter &p, const Game &g, const View &view) {
         const data::TowerDef &def = data::TOWERS[t.type];
         const double cx = t.x, cy = t.y;
         const double ca = std::cos(t.angle), sa = std::sin(t.angle);
+        // Grow the whole plant around its center on big boards (restored at the loop end).
+        p.save();
+        p.translate(cx, cy);
+        p.scale(FX_PLANT, FX_PLANT);
+        p.translate(-cx, -cy);
 
         if (t.id == view.selectedId) {
             strokeCircle(p, cx, cy, POT_R + 6, rgba(255, 240, 140, 0.35), 7);
@@ -615,7 +722,7 @@ void Renderer::drawTowers(QPainter &p, const Game &g, const View &view) {
 
         if (def.projectile == data::Projectile::Aura && !t.stunned(g.time)) {   // gooed clovers lose their aura
             // Clover: a soft green aura ripples out to the edge of its range.
-            const double R = def.levels[t.level].range * TILE;
+            const double R = def.levels[t.level].range * TILE / FX_PLANT;   // true range despite the plant scale
             double ph = std::fmod(g.time * 0.6 + t.id * 0.37, 1.0);
             strokeCircle(p, cx, cy, R * ph, rgba(90, 220, 130, 0.45 * (1 - ph)), 2.5);
             strokeCircle(p, cx, cy, R, rgba(90, 220, 130, 0.18), 1.5);
@@ -689,6 +796,7 @@ void Renderer::drawTowers(QPainter &p, const Game &g, const View &view) {
         p.setBrush(QColor("#ffd84d"));
         for (int i = 0; i < n; i++)
             p.drawEllipse(QPointF(cx + (i - (n - 1) / 2.0) * 8, py), 2.7, 2.7);
+        p.restore();
     }
 }
 
@@ -701,7 +809,7 @@ void Renderer::drawEnemies(QPainter &p, const Game &g) {
     for (const Enemy *ep : order) {
         const Enemy &e = *ep;
         const data::EnemyDef &def = data::ENEMIES[e.type];
-        const double size = (def.boss ? BOSS_SIZE : ENEMY_SIZE) * def.scale;
+        const double size = (def.boss ? BOSS_SIZE : ENEMY_SIZE) * def.scale * FX_BUG;   // bigger on big boards
         const bool slowed = e.slowed(time);
         const bool poisoned = e.poisoned(time);
         const double bob = std::sin(time * (slowed ? 8 : 14) + e.id * 1.7);
@@ -856,7 +964,7 @@ void Renderer::drawEnemies(QPainter &p, const Game &g) {
         // HP bar.
         if (e.hp < e.maxHp && e.maxHp > 0) {
             double ratio = clamp01(e.hp / e.maxHp);
-            double bw = size * 0.85, bh = def.boss ? 5 : 4;
+            double bw = size * 0.85, bh = (def.boss ? 5 : 4) * FX_UI;
             double bx = gx - bw / 2, by = gy - alt - size * 0.62 - bh;
             p.fillRect(QRectF(bx - 1, by - 1, bw + 2, bh + 2), rgba(20, 20, 20, 0.65));
             p.fillRect(QRectF(bx, by, bw * ratio, bh),
@@ -985,6 +1093,17 @@ void Renderer::drawEffects(QPainter &p, const Game &g) {
         const double u = fx.ttl > 0 ? clamp01(fx.t / fx.ttl) : 1;
         const double a = 1 - u;
         const double eu = easeOut(u);
+        // Small markers (hit sparks, kill puffs, coin text...) grow on big boards. Area effects
+        // (splash, flame, leak) keep their true gameplay size.
+        p.save();
+        const bool marker = fx.kind == EffectKind::Hit || fx.kind == EffectKind::Kill ||
+                            fx.kind == EffectKind::Coin || fx.kind == EffectKind::Jackpot ||
+                            fx.kind == EffectKind::Split;
+        if (marker && FX_UI > 1) {
+            p.translate(fx.x, fx.y);
+            p.scale(FX_UI, FX_UI);
+            p.translate(-fx.x, -fx.y);
+        }
         switch (fx.kind) {
         case EffectKind::Hit: {
             p.setOpacity(a);
@@ -1219,6 +1338,7 @@ void Renderer::drawEffects(QPainter &p, const Game &g) {
             break;
         }
         }
+        p.restore();
     }
     p.setOpacity(1);
 }
@@ -1234,17 +1354,17 @@ void Renderer::drawSkyLanes(QPainter &g, const Game &game) {
         auto px = [](const std::array<double, 2> &t) { return QPointF(t[0] * TILE + TILE / 2, t[1] * TILE + TILE / 2); };
         trail.moveTo(px(lane[0]));
         for (size_t i = 1; i < lane.size(); i++) trail.lineTo(px(lane[i]));
-        QPen glow = roundPen(rgba(180, 225, 255, 0.18), 14);
+        QPen glow = roundPen(rgba(180, 225, 255, 0.18), 14 * FX_UI);
         g.setBrush(Qt::NoBrush);
         g.setPen(glow);
         g.drawPath(trail);
-        QPen dash = roundPen(game.map().season == data::Season::Winter ? rgba(60, 100, 160, 0.6) : rgba(255, 255, 255, 0.55), 2.5);   // blue on snow
+        QPen dash = roundPen(game.map().season == data::Season::Winter ? rgba(60, 100, 160, 0.6) : rgba(255, 255, 255, 0.55), 2.5 * FX_UI);   // blue on snow
         dash.setDashPattern({3, 3});
         g.setPen(dash);
         g.drawPath(trail);
         // Chevrons every ~1.5 tiles along the lane.
         const double len = trail.length();
-        g.setPen(roundPen(game.map().season == data::Season::Winter ? rgba(50, 90, 150, 0.75) : rgba(255, 255, 255, 0.7), 2.2));
+        g.setPen(roundPen(game.map().season == data::Season::Winter ? rgba(50, 90, 150, 0.75) : rgba(255, 255, 255, 0.7), 2.2 * FX_UI));
         for (double d = TILE; d < len - TILE * 0.5; d += TILE * 1.5) {
             double pct = trail.percentAtLength(d);
             QPointF at = trail.pointAtPercent(pct);
@@ -1264,17 +1384,18 @@ void Renderer::drawFirePoints(QPainter &p, const Game &g, const View &view) {
     auto reticle = [&](double x, double y, const QColor &c, double alpha) {
         QColor col = c;
         col.setAlphaF(alpha);
-        QPen ring(col, 2);
+        // The zone ring keeps its gameplay radius; the crosshair grows on big boards (FX_UI).
+        QPen ring(col, 2 * FX_UI);
         ring.setDashPattern({3, 2});
         p.setBrush(Qt::NoBrush);
         p.setPen(ring);
         p.drawEllipse(QPointF(x, y), FIRE_POINT_RADIUS, FIRE_POINT_RADIUS);
-        p.setPen(QPen(col, 2));
-        p.drawEllipse(QPointF(x, y), 7, 7);
+        p.setPen(QPen(col, 2 * FX_UI));
+        p.drawEllipse(QPointF(x, y), 7 * FX_UI, 7 * FX_UI);
         for (int k = 0; k < 4; k++) {
             double a = k * M_PI / 2;
-            p.drawLine(QPointF(x + std::cos(a) * 10, y + std::sin(a) * 10),
-                       QPointF(x + std::cos(a) * 16, y + std::sin(a) * 16));
+            p.drawLine(QPointF(x + std::cos(a) * 10 * FX_UI, y + std::sin(a) * 10 * FX_UI),
+                       QPointF(x + std::cos(a) * 16 * FX_UI, y + std::sin(a) * 16 * FX_UI));
         }
     };
     for (const Tower &t : g.towers) {
@@ -1291,8 +1412,9 @@ void Renderer::drawFirePoints(QPainter &p, const Game &g, const View &view) {
     // Multi-select: a soft ring on every plant in the group.
     for (const Tower &t : g.towers) {
         if (!view.inGroup(t.id) || t.id == view.selectedId) continue;
-        strokeCircle(p, t.x, t.y, TILE * 0.34 + 6, rgba(255, 240, 140, 0.35), 6);
-        strokeCircle(p, t.x, t.y, TILE * 0.34 + 6, QColor("#fff1a0"), 2);
+        const double gr = (TILE * 0.34 + 6) * FX_PLANT;   // matches the scaled plant
+        strokeCircle(p, t.x, t.y, gr, rgba(255, 240, 140, 0.35), 6 * FX_PLANT);
+        strokeCircle(p, t.x, t.y, gr, QColor("#fff1a0"), 2 * FX_PLANT);
     }
     // Focus fire: aim lines from each focusing plant and a pulsing marker on the bug.
     std::vector<int> marked;
@@ -1308,9 +1430,9 @@ void Renderer::drawFirePoints(QPainter &p, const Game &g, const View &view) {
             if (std::find(marked.begin(), marked.end(), e.id) == marked.end()) {
                 marked.push_back(e.id);
                 const double pulse = 1 + 0.15 * std::sin(g.time * 10);
-                const double r = TILE * 0.42 * pulse;
+                const double r = TILE * 0.42 * pulse * FX_BUG;   // wraps the (scaled) bug
                 p.setBrush(Qt::NoBrush);
-                p.setPen(QPen(rgba(255, 60, 40, 0.95), 2.5));
+                p.setPen(QPen(rgba(255, 60, 40, 0.95), 2.5 * FX_UI));
                 p.drawEllipse(QPointF(e.x, ey), r, r);
                 for (int k = 0; k < 4; k++) {   // corner ticks of a target reticle
                     double a = k * M_PI / 2 + M_PI / 4;
@@ -1360,6 +1482,13 @@ void Renderer::drawBossBar(QPainter &p, const Game &g) {
     if (bosses.empty()) return;
     std::sort(bosses.begin(), bosses.end(), [](const Enemy *a, const Enemy *b) { return a->id < b->id; });
 
+    // Bigger boards are drawn smaller on screen: scale the bar up (around the bottom center)
+    // so it stays the same on-screen size as on the default 15-column board.
+    p.save();
+    const double grow = std::max(1.0, W / 960.0);
+    p.translate(W / 2, H);
+    p.scale(grow, grow);
+    p.translate(-W / 2, -H);
     const double bw = 340, bh = 12, gap = 6;
     const double x0 = (W - bw) / 2, y0 = H - 22;   // bottom edge: the top is used by toasts
     // Panel.
@@ -1399,4 +1528,5 @@ void Renderer::drawBossBar(QPainter &p, const Game &g) {
             p.setOpacity(1);
         }
     }
+    p.restore();
 }
