@@ -18,7 +18,7 @@ constexpr double CORNER = 16;
 
 BoardWidget::BoardWidget(Game *game, QWidget *parent) : QWidget(parent), game_(game) {
     setMouseTracking(true);
-    setMinimumSize(data::W / 2, data::H / 2);
+    setMinimumSize(480, 320);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     toastTimer_.setSingleShot(true);
     connect(&toastTimer_, &QTimer::timeout, this, &BoardWidget::hideToast);
@@ -88,24 +88,24 @@ void BoardWidget::drawConfetti(QPainter &p) {
 QRectF BoardWidget::boardRect() const {
     // Largest 3:2 rectangle that fits: centered left-to-right, at the top
     // (leaving room below for its shadow).
-    double s = std::min(width() / double(data::W), (height() - 6) / double(data::H));
-    double w = data::W * s, h = data::H * s;
+    double s = std::min(width() / double(game_->W), (height() - 6) / double(game_->H));
+    double w = game_->W * s, h = game_->H * s;
     return {(width() - w) / 2, 0, w, h};
 }
 
 bool BoardWidget::tileAt(QPointF pos, int &col, int &row) const {
     QRectF r = boardRect();
     if (r.isEmpty()) return false;
-    col = int(std::floor((pos.x() - r.left()) * data::W / r.width() / data::TILE));
-    row = int(std::floor((pos.y() - r.top()) * data::H / r.height() / data::TILE));
-    return col >= 0 && row >= 0 && col < data::COLS && row < data::ROWS;
+    col = int(std::floor((pos.x() - r.left()) * game_->W / r.width() / data::TILE));
+    row = int(std::floor((pos.y() - r.top()) * game_->H / r.height() / data::TILE));
+    return col >= 0 && row >= 0 && col < game_->cols && row < game_->rows;
 }
 
 void BoardWidget::paintEvent(QPaintEvent *) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     const QRectF r = boardRect();
-    const double s = r.width() / data::W;
+    const double s = r.width() / game_->W;
 
     // Soft shadow, then the board clipped to rounded corners.
     p.setPen(Qt::NoPen);

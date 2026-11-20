@@ -50,12 +50,12 @@ static void autoPlant(Game &g, const std::vector<int> &types) {
         const auto proj = data::TOWERS[type].projectile;
         const bool hitsAir = proj != data::Projectile::Mortar && proj != data::Projectile::Flame;
         int bestCol = -1, bestRow = -1, bestScore = -1;
-        for (int r = 0; r < data::ROWS; r++)
-            for (int c = 0; c < data::COLS; c++) {
+        for (int r = 0; r < g.rows; r++)
+            for (int c = 0; c < g.cols; c++) {
                 if (!g.canPlace(c, r)) continue;
                 int score = 0;
-                for (int pr = 0; pr < data::ROWS; pr++)
-                    for (int pc = 0; pc < data::COLS; pc++)
+                for (int pr = 0; pr < g.rows; pr++)
+                    for (int pc = 0; pc < g.cols; pc++)
                         if (g.isPathTile(pc, pr) && (pc - c) * (pc - c) + (pr - r) * (pr - r) <= 5) score++;
                 if (hitsAir)
                     for (const auto &p : lane)

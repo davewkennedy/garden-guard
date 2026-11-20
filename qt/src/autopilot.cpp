@@ -74,11 +74,11 @@ double Autopilot::tileScore(int type, int col, int row) const {
     // Attackers: how much path they cover, with a bonus for path near the
     // entrance (bugs spend longer in range of plants they meet early).
     double score = 0;
-    for (int r = 0; r < data::ROWS; r++)
-        for (int c = 0; c < data::COLS; c++) {
+    for (int r = 0; r < g_.rows; r++)
+        for (int c = 0; c < g_.cols; c++) {
             if (!g_.isPathTile(c, r)) continue;
             double dc = c - col, dr = r - row;
-            if (dc * dc + dr * dr <= r2) score += 1.0 + 0.15 * (data::COLS - c) / data::COLS;
+            if (dc * dc + dr * dr <= r2) score += 1.0 + 0.15 * (g_.cols - c) / g_.cols;
         }
     // Plants that can hit flyers also value covering the sky lanes (sampled every
     // half tile). Ground attacks (mortar splash, chili flame) can't, so they skip this.
@@ -104,8 +104,8 @@ bool Autopilot::placeNext() {
     if (g_.coins < data::TOWERS[type].levels[0].cost) return false;
     int bestCol = -1, bestRow = -1;
     double best = -1;
-    for (int r = 0; r < data::ROWS; r++)
-        for (int c = 0; c < data::COLS; c++) {
+    for (int r = 0; r < g_.rows; r++)
+        for (int c = 0; c < g_.cols; c++) {
             if (!g_.canPlace(c, r)) continue;
             double s = tileScore(type, c, r);
             if (s > best) { best = s; bestCol = c; bestRow = r; }

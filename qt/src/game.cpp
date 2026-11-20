@@ -59,6 +59,11 @@ Game::Game(QObject *parent) : QObject(parent) {
 void Game::loadMap(int index) {
     mapIndex = index;
     const auto &tiles = map().path;
+    // This map's grid (tiles stay 64 logical px; the board scales to fit the window).
+    cols = map().cols;
+    rows = map().rows;
+    W = cols * TILE;
+    H = rows * TILE;
 
     // Fresh start on this map: coins reset, no plants or bugs. Lives are kept.
     phase = Phase::Build;
@@ -109,7 +114,7 @@ void Game::loadMap(int index) {
     }
 
     // Path tiles: every in-grid tile a straight segment passes through.
-    pathTiles_.assign(data::COLS * data::ROWS, false);
+    pathTiles_.assign(cols * rows, false);
     for (size_t i = 0; i + 1 < tiles.size(); i++) {
         int c0 = tiles[i][0], r0 = tiles[i][1];
         int c1 = tiles[i + 1][0], r1 = tiles[i + 1][1];
@@ -117,15 +122,15 @@ void Game::loadMap(int index) {
         for (int s = 0; s <= steps; s++) {
             int c = c0 + sign(c1 - c0) * s;
             int r = r0 + sign(r1 - r0) * s;
-            if (c >= 0 && c < data::COLS && r >= 0 && r < data::ROWS)
-                pathTiles_[r * data::COLS + c] = true;
+            if (c >= 0 && c < cols && r >= 0 && r < rows)
+                pathTiles_[r * cols + c] = true;
         }
     }
 
     // Leak effects appear at the path end, pulled onto the visible board.
     const QPointF &last = path.back();
-    leakX_ = std::clamp(last.x(), TILE / 2, data::W - TILE / 2);
-    leakY_ = std::clamp(last.y(), TILE / 2, data::H - TILE / 2);
+    leakX_ = std::clamp(last.x(), TILE / 2, W - TILE / 2);
+    leakY_ = std::clamp(last.y(), TILE / 2, H - TILE / 2);
 }
 
 // ---------- Path ----------
@@ -153,12 +158,12 @@ void Game::addEffect(EffectKind kind, double x, double y, double radius, const Q
 // ---------- Grid & towers ----------
 
 bool Game::isPathTile(int col, int row) const {
-    if (col < 0 || col >= data::COLS || row < 0 || row >= data::ROWS) return false;
-    return pathTiles_[row * data::COLS + col];
+    if (col < 0 || col >= cols || row < 0 || row >= rows) return false;
+    return pathTiles_[row * cols + col];
 }
 
 bool Game::canPlace(int col, int row) const {
-    if (col < 0 || col >= data::COLS || row < 0 || row >= data::ROWS) return false;
+    if (col < 0 || col >= cols || row < 0 || row >= rows) return false;
     if (isPathTile(col, row)) return false;
     return std::none_of(towers.begin(), towers.end(),
                         [&](const Tower &t) { return t.col == col && t.row == row; });

@@ -106,6 +106,9 @@ public:
     Phase phase = Phase::Build;
     int mapIndex = 0;                  // current campaign map
     int totalMaps = int(data::MAPS.size());
+    // Current map's grid in tiles, and the board size in logical px (cols/rows * TILE).
+    int cols = data::DEFAULT_COLS, rows = data::DEFAULT_ROWS;
+    double W = data::DEFAULT_COLS * data::TILE, H = data::DEFAULT_ROWS * data::TILE;
     int coins = 0;
     int lives = data::START_LIVES;
     int wave = 0;                      // waves started so far on this map

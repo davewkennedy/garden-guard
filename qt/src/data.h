@@ -7,11 +7,12 @@
 
 namespace data {
 
-constexpr int COLS = 15;
-constexpr int ROWS = 10;
+// Tiles are always 64 logical px. Each map has its own grid size (MapDef::cols/rows);
+// the board scales to fit the window, so bigger grids look like smaller tiles.
+// Runtime grid size: Game::cols/rows/W/H.
 constexpr int TILE = 64;
-constexpr int W = COLS * TILE;   // 960 logical px
-constexpr int H = ROWS * TILE;   // 640 logical px
+constexpr int DEFAULT_COLS = 15;
+constexpr int DEFAULT_ROWS = 10;
 
 constexpr double SELL_RATE = 0.7;      // refund = floor(spent * SELL_RATE)
 constexpr int WAVE_BONUS_BASE = 20;    // coins on clearing wave n: BASE + PER * n
@@ -242,6 +243,8 @@ struct MapDef {
     // (diagonals allowed) from off-grid left to the house on the right.
     std::vector<Lane> skyLanes = {};
     std::vector<Wave> waves = {};               // this map's waves (empty = global WAVES)
+    // Grid size in tiles. The path's last waypoint should be at x = cols (just off-grid right).
+    int cols = DEFAULT_COLS, rows = DEFAULT_ROWS;
 };
 
 inline const std::vector<MapDef> MAPS = {

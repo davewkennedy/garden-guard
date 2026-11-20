@@ -16,8 +16,9 @@ namespace {
 
 constexpr double TAU = 2 * M_PI;
 constexpr double TILE = data::TILE;
-constexpr double W = data::W;
-constexpr double H = data::H;
+double W = 960;   // current board size in logical px (set per map in setupScale)
+double H = 640;
+int GRID_COLS = 15, GRID_ROWS = 10;   // current map grid (set per map in setupScale)
 
 constexpr double GLYPH_PAD = 1.3;     // glyph image is this much bigger than the font size
 constexpr double KICK_TIME = 0.16;    // tower shot "kick" duration (s)
@@ -104,8 +105,14 @@ void rangeCircle(QPainter &p, double x, double y, double r, bool ok) {
 // ---------- scaling & caches ----------
 
 void Renderer::setupScale(double scale, const Game &game) {
+    // This map's board size (grids differ per map; tiles are always 64 logical px).
+    W = game.W;
+    H = game.H;
+    GRID_COLS = game.cols;
+    GRID_ROWS = game.rows;
     // Round to quarter steps so window resizing doesn't rebuild the caches constantly.
-    double want = std::clamp(std::round(scale * 4) / 4, 0.5, 4.0);
+    // Big boards are drawn at a small scale; allow down to 0.25 so caches stay sharp enough.
+    double want = std::clamp(std::round(scale * 4) / 4, 0.25, 4.0);
     if (want != dpr_) {
         dpr_ = want;
         glyphs_.clear();
@@ -201,8 +208,8 @@ QPixmap Renderer::buildBackground(const Game &game) {
     const QColor grassA(map.grassA), grassB(map.grassB);
 
     // Grass tiles with subtle variation.
-    for (int r = 0; r < data::ROWS; r++) {
-        for (int c = 0; c < data::COLS; c++) {
+    for (int r = 0; r < GRID_ROWS; r++) {
+        for (int c = 0; c < GRID_COLS; c++) {
             QRectF tile(c * TILE, r * TILE, TILE, TILE);
             g.fillRect(tile, (r + c) % 2 ? grassA : grassB);
             double v = rand();
@@ -264,8 +271,8 @@ QPixmap Renderer::buildBackground(const Game &game) {
     }
 
     // Decorations on grass tiles.
-    for (int r = 0; r < data::ROWS; r++) {
-        for (int c = 0; c < data::COLS; c++) {
+    for (int r = 0; r < GRID_ROWS; r++) {
+        for (int c = 0; c < GRID_COLS; c++) {
             double roll = rand();
             double cx = c * TILE + 12 + rand() * (TILE - 24);
             double cy = r * TILE + 12 + rand() * (TILE - 24);
@@ -393,13 +400,13 @@ void Renderer::drawFireflies(QPainter &p, const Game &g) {
 
 void Renderer::drawGrid(QPainter &p) {
     p.setPen(QPen(rgba(255, 255, 255, 0.16), 1));
-    for (int c = 1; c < data::COLS; c++) p.drawLine(QPointF(c * TILE, 0), QPointF(c * TILE, H));
-    for (int r = 1; r < data::ROWS; r++) p.drawLine(QPointF(0, r * TILE), QPointF(W, r * TILE));
+    for (int c = 1; c < GRID_COLS; c++) p.drawLine(QPointF(c * TILE, 0), QPointF(c * TILE, H));
+    for (int r = 1; r < GRID_ROWS; r++) p.drawLine(QPointF(0, r * TILE), QPointF(W, r * TILE));
 }
 
 void Renderer::drawPreview(QPainter &p, const View &view) {
     const auto &h = *view.hover;
-    if (h.col < 0 || h.col >= data::COLS || h.row < 0 || h.row >= data::ROWS) return;
+    if (h.col < 0 || h.col >= GRID_COLS || h.row < 0 || h.row >= GRID_ROWS) return;
     const data::TowerDef &def = data::TOWERS[view.placing];
     double x = h.col * TILE, y = h.row * TILE;
     double cx = x + TILE / 2, cy = y + TILE / 2;
