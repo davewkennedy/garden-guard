@@ -236,6 +236,32 @@ int main(int argc, char *argv[]) {
         ok &= check(expected > 0 && std::abs(measured - expected) < 2, "snow slows ground bugs by bugSpeedMult");
     }
 
+    // P) Crossroads: on a map with path2, ground bugs use both entrances.
+    {
+        std::printf("Test P: two entrances (path2)\n");
+        int map2 = -1;
+        for (int m = 0; m < int(data::MAPS.size()); m++)
+            if (!data::MAPS[m].path2.empty()) { map2 = m; break; }
+        int onMain = 0, onSecond = 0;
+        if (map2 >= 0) {
+            Game g;
+            g.reset(map2);
+            g.startWave();
+            std::vector<int> seen;
+            for (int i = 0; i < 60 * 20; i++) {
+                g.update(1.0 / 60);
+                for (const Enemy &e : g.enemies)
+                    if (!data::ENEMIES[e.type].flying && std::find(seen.begin(), seen.end(), e.id) == seen.end()) {
+                        seen.push_back(e.id);
+                        (e.route == 1 ? onSecond : onMain)++;
+                    }
+            }
+            std::printf("    map %d %s: %d ground bugs on the main path, %d on the second\n", map2 + 1,
+                        qPrintable(data::MAPS[map2].name), onMain, onSecond);
+        }
+        ok &= check(map2 >= 0 && onMain > 0 && onSecond > 0, "ground bugs use both entrances");
+    }
+
     // U) Plant unlocks (drafted by claude2-0c): locked plants can't be placed, and
     //    each map's new plants unlock there.
     {
@@ -378,6 +404,47 @@ int main(int argc, char *argv[]) {
         }
         ok &= check(g.phase == Phase::Won, "autopilot wins the whole campaign with normal coins");
         std::printf("    autopilot result: %s\n", g.phase == Phase::Won ? "won the campaign" : "lost");
+    }
+
+    // F) Focus fire: plants gang up on the chosen bug, ambushers leave their zone
+    //    (without the bonus), and everyone reverts once the bug is gone.
+    {
+        std::printf("Test F: focus fire\n");
+        Game g;
+        g.unlockAll = true;
+        g.coins = 100000;
+        std::vector<int> ids;
+        for (int r = 0; r < g.rows && ids.size() < 3; r++)
+            for (int c = 0; c < g.cols && ids.size() < 3; c++)
+                if (g.canPlace(c, r) && (g.isPathTile(c + 1, r) || g.isPathTile(c, r + 1))) {
+                    Tower *t = g.placeTower(typeOf("sprout"), c, r);
+                    if (t) ids.push_back(t->id);
+                }
+        ok &= check(ids.size() == 3, "placed 3 sprouts next to the path");
+        // Give the first sprout a fire point so we can check it leaves its zone.
+        Tower *amb = g.getTower(ids[0]);
+        g.setFirePoint(amb->id, amb->x + data::TILE, amb->y);
+        const int ambushDamage = g.damageOf(*amb);
+        g.startWave();
+        for (int i = 0; i < 60 * 4 && g.enemies.empty(); i++) g.update(1.0 / 60);
+        ok &= check(!g.enemies.empty(), "bugs spawned");
+        const int target = g.enemies.front().id;
+        ok &= check(g.focusFire(ids, target), "focusFire accepted");
+        bool allFocused = true;
+        for (int id : ids) allFocused &= g.getTower(id)->focusId == target;
+        ok &= check(allFocused, "every selected plant focuses the bug");
+        ok &= check(g.damageOf(*g.getTower(ids[0])) < ambushDamage, "no ambush bonus while focusing");
+        // Run until the target is gone (killed or escaped).
+        auto alive = [&] { for (const Enemy &e : g.enemies) if (e.id == target && e.alive) return true; return false; };
+        for (int i = 0; i < 60 * 60 && alive(); i++) g.update(1.0 / 60);
+        ok &= check(!alive(), "focused bug is gone");
+        g.update(1.0 / 60);
+        bool reverted = true;
+        for (int id : ids) if (Tower *t = g.getTower(id)) reverted &= t->focusId == -1;
+        ok &= check(reverted, "plants revert when the bug is gone");
+        ok &= check(g.getTower(ids[0])->hasFirePoint && g.damageOf(*g.getTower(ids[0])) == ambushDamage,
+                    "the ambusher returns to its fire point (bonus restored)");
+        ok &= check(g.enemyNear(-1000, -1000, 10) == -1, "enemyNear finds nothing far away");
     }
 
     std::printf("%s\n", ok ? "PASS" : "FAIL");

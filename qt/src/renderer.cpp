@@ -393,10 +393,14 @@ QPixmap Renderer::buildBackground(const Game &game) {
         }
     }
 
-    // Dirt path.
+    // Dirt path, plus the optional second entrance (claude2-0c) drawn the same way.
     const std::vector<QPointF> &pathPts = game.path;
     QPainterPath route(pathPts[0]);
     for (size_t i = 1; i < pathPts.size(); i++) route.lineTo(pathPts[i]);
+    if (game.path2.size() >= 2) {
+        route.moveTo(game.path2[0]);
+        for (size_t i = 1; i < game.path2.size(); i++) route.lineTo(game.path2[i]);
+    }
     g.setBrush(Qt::NoBrush);
     if (season == data::Season::Winter) {   // snowbank along the path edges
         g.setPen(roundPen(rgba(250, 252, 255, 0.75), TILE * 1.0));
@@ -410,7 +414,10 @@ QPixmap Renderer::buildBackground(const Game &game) {
         g.drawPath(route);
     }
 
-    // Dirt specks and pebbles along the path.
+    // Dirt specks and pebbles along the path (each entrance).
+    for (const std::vector<QPointF> *routePts : {&game.path, &game.path2}) {
+    const std::vector<QPointF> &pathPts = *routePts;
+    if (pathPts.size() < 2) continue;
     std::vector<double> segLen;
     double total = 0;
     for (size_t i = 0; i + 1 < pathPts.size(); i++) {
@@ -437,6 +444,7 @@ QPixmap Renderer::buildBackground(const Game &game) {
             QColor c = kind < 0.55 ? rgba(120, 80, 40, 0.45) : rgba(235, 205, 160, 0.5);
             fillCircle(g, x, y, 0.7 + rand() * 1.5, c);
         }
+    }
     }
 
     // Decorations on grass tiles.
@@ -533,12 +541,14 @@ QPixmap Renderer::buildBackground(const Game &game) {
         }
     }
 
-    // Bug nest just inside the left edge, where the path enters.
-    {
-        const QPointF &first = pathPts[0], &second = pathPts[1];
+    // Bug nest just inside the edge where each entrance's path comes in.
+    for (const std::vector<QPointF> *routePts : {&game.path, &game.path2}) {
+        if (routePts->size() < 2) continue;
+        const QPointF &first = (*routePts)[0], &second = (*routePts)[1];
         double dir = second.x() > first.x() ? 1 : (second.x() < first.x() ? -1 : 0);
+        double dirY = dir != 0 ? 0 : second.y() > first.y() ? 1 : (second.y() < first.y() ? -1 : 0);
         double nx = std::clamp(first.x() + dir * TILE * 1.3, TILE * 0.32, W - TILE * 0.32);
-        double ny = first.y();
+        double ny = std::clamp(first.y() + dirY * TILE * 1.3, TILE * 0.32, H - TILE * 0.32);
         fillEllipse(g, nx, ny, 30, 24, 0, QColor("#7a5432"));
         QRadialGradient hole = radial(nx, ny + 2, 2, nx, ny, 24);
         hole.setColorAt(0, QColor("#120a05"));
@@ -1089,6 +1099,40 @@ void Renderer::drawShots(QPainter &p, const Game &g) {
 }
 
 void Renderer::drawEffects(QPainter &p, const Game &g) {
+    // Wind gust: white streaks racing across the board in the push direction (faint while warning).
+    if (const double ws = g.windStrength(), ww = g.windWarning(); ws > 0.01 || ww > 0) {
+        const int dir = g.windDir();
+        p.setOpacity(std::min(1.0, 0.3 * ww + 0.9 * ws));
+        // (claude2-3e) Few, long, fast, tapered streaks with a gentle S-curve and a slight slant,
+        // so they read as gusts of wind rather than falling rain. Scaled for big boards.
+        const int n = std::max(8, int(15 * std::sqrt(g.W * g.H / (960.0 * 640.0))));
+        const double slant = 0.22;   // sideways drift per unit of travel
+        for (int i = 0; i < n; i++) {
+            const double speed = (1000 + (i * 37 % 400)) * FX_UI;
+            const double len = (110 + (i * 53 % 70)) * FX_UI;
+            const double travel = std::fmod(g.time * speed + i * 397.3, g.H + len * 2) - len;
+            const double y = dir > 0 ? travel : g.H - travel;                      // head position
+            const double x = std::fmod(i * 157.7 + 40 + travel * slant, g.W);
+            const double sway = std::sin(g.time * 2.2 + i * 1.7) * 10 * FX_UI;
+            const QPointF head(x, y), tail(x - len * slant, y - dir * len);
+            QPainterPath s(tail);
+            s.cubicTo(QPointF(tail.x() + sway, y - dir * len * 0.66), QPointF(head.x() - sway, y - dir * len * 0.33), head);
+            // Tapered: transparent tail fading into a bright head.
+            QLinearGradient fade(tail, head);
+            fade.setColorAt(0, rgba(255, 255, 255, 0));
+            fade.setColorAt(0.6, rgba(255, 255, 255, 0.55));
+            fade.setColorAt(1, rgba(255, 255, 255, 0.95));
+            QLinearGradient shade(tail, head);
+            shade.setColorAt(0, rgba(20, 60, 30, 0));
+            shade.setColorAt(1, rgba(20, 60, 30, 0.2));
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QPen(QBrush(shade), 3.4 * FX_UI, Qt::SolidLine, Qt::RoundCap));   // soft shadow for pale ground
+            p.drawPath(s.translated(1.2, 1.2));
+            p.setPen(QPen(QBrush(fade), 2.4 * FX_UI, Qt::SolidLine, Qt::RoundCap));
+            p.drawPath(s);
+        }
+        p.setOpacity(1);
+    }
     for (const auto &fx : g.effects) {
         const double u = fx.ttl > 0 ? clamp01(fx.t / fx.ttl) : 1;
         const double a = 1 - u;

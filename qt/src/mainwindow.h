@@ -16,6 +16,7 @@ class QFormLayout;
 class QFrame;
 class QLabel;
 class QPushButton;
+class QScrollArea;
 class QWidget;
 
 class MainWindow : public QMainWindow {
@@ -27,6 +28,7 @@ public:
     // Scenes: intro, play, placing, mapclear, win, lose. Returns false if unknown.
     bool setupScene(const QString &scene);
     void startAutopilot(int speed) { setAuto(true); setSpeed(speed); }   // hidden --autopilot option
+    void startAtMap(int map) { startRunAt(map); }   // hidden --start-map option (1-based on the command line)
 
 protected:
     void keyPressEvent(QKeyEvent *e) override;
@@ -124,6 +126,12 @@ private:
     void buildMapSelect();
     void showMapSelect(int furthest);   // list maps 0..furthest
     void startRunAt(int map);           // fresh run (full lives) starting at `map`
+    // 📖 Garden Journal (journal.cpp): bugs met and plants unlocked so far.
+    QWidget *journal_ = nullptr;
+    QScrollArea *journalScroll_ = nullptr;
+    void buildJournal();
+    void fillJournal();
+    void toggleJournal();   // header 📖 button / J key
     QLabel *endTitle_ = nullptr, *endText_ = nullptr;
     QLabel *nextTitle_ = nullptr, *nextText_ = nullptr;
     QPushButton *nextBtn_ = nullptr;

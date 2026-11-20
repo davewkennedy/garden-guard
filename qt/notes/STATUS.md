@@ -30,6 +30,21 @@ All Session A features are integrated and passing. Remaining time goes to polish
 - 17:08 claude2-3e: seasons (backgrounds + weather) and the "Choose map" screen landed. Now on big-map readability (sprite/text scaling).
 - 17:10 Focus fire verified on screen (map 6). Title renamed to Garden Guard++ with its own save data.
 
+- 17:12 claude2-0c: NEW badge moved to a corner ribbon (prices visible), window back to 860 px. claude2-3e: QA of all 10 maps clean; README rewritten for ++. claude2-63: terrain landed (rocks, ponds, plantable lily pads; frozen in winter).
+- 17:12 Real-app smoke test (autopilot 3x, 60 s): no crashes, map 1 cleared.
+- 17:13 Session B items in progress: two entrances (claude2-0c), wind gusts (claude2-63), Garden Journal 📖 (claude2-3e), winter snow + terrain placement + balance (claude2-de). Snapshot `garden-plusplus-3-polish.tar`.
+
+- 17:14 Test F (focus fire) added and passing. claude2-de: winter snow (maps 8-10 slower bugs, weaker frost), terrain placed, balance: autopilot wins with 13 lives.
+- 17:16 claude2-3e: 📖 Garden Journal (J). claude2-63: wind gusts (gust toast connected). 17:17 claude2-0c: two entrances (path2).
+- 17:17 FINAL TASKS: claude2-de map 7 "Crossroads" + wind on 6-7 + final balance (17:32); claude2-63 late-map real-app smoke tests (17:32); claude2-0c map-mechanic intros on the card (17:30); claude2-3e vine scene + QA + showcase screenshots (17:32). Wrap-up by claude2-f4 from ~17:33.
+
+- 17:19 claude2-de: map 7 Crossroads + wind on maps 6-7; autopilot wins with 9 lives (smooth curve). 17:19 claude2-0c: "🗺️ On this map:" mechanics on the card.
+- 17:21 claude2-de: the autopilot uses focus fire (boss > golden > wild bat > healer). claude2-0c: README updated. claude2-3e: vine scene, QA, 10 showcase screenshots, wind streaks restyled.
+- 17:22 claude2-0c crash sweep: 123 runs, 1 crash (mapclear10, a screenshot-only path) -> fixed by claude2-f4 with a guard.
+- 17:23 claude2-de: notes/balance.md (front-loaded difficulty; waves 4-5 too easy). claude2-3e: WHATS-NEW.md.
+- 17:24 claude2-63: real-app smoke tests on maps 5-10: all exit 0, mechanics verified in-app.
+- 17:24 In progress: claude2-de making waves 4-5 the climax on maps 6-10 (keep or revert by 17:31). Then FINAL BUILD -> re-sweep (claude2-0c) + showcase refresh (claude2-3e) -> wrap-up.
+
 ## Backlog (next tasks as helpers free up)
 1. Snow slows bugs on winter maps (a MapDef speed multiplier), and frost a bit weaker there (claude2-de)
 2. Side panel height with 11 plants (shop 3 columns, or a scroll area)

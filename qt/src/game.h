@@ -29,6 +29,7 @@ struct Enemy {
     double hopStart = -1;     // state time of the last hop, -1 if never (renderer arcs it)
     double healTime = -1;     // state time this bug was last healed, -1 if never
     int lane = -1;            // flyers: index into the map's sky lanes (-1 = walks the path)
+    int route = 0;            // ground bugs: 0 = main path, 1 = second entrance (MapDef::path2)
     // Wild bats: free flight.
     double heading = 0;       // radians
     double spawnTime = 0;
@@ -130,10 +131,16 @@ public:
     std::vector<Shot> shots;
     std::vector<Effect> effects;
     std::vector<Spit> spits;           // scorpion goo in flight
+    // Wind gusts (MapDef::windEvery). Time-based, so runs stay deterministic.
+    double windStrength() const;   // 0..1 smooth envelope of the current gust
+    double windWarning() const;    // 0..1 ramp during the warning second before a gust
+    int windDir() const;           // +1 pushes down, -1 pushes up (alternates gust to gust)
+    double windOffset() const { return windDir() * 1.5 * data::TILE * windStrength(); }
     // How far above its ground point a bug's sprite is drawn (flyers hover); shots aim there.
     double visualY(const Enemy &e) const { return data::ENEMIES[e.type].flying && !e.grounded(time) ? 16 : 0; }
     std::vector<std::vector<QPointF>> skyLanes;   // pixel polylines flyers follow
     std::vector<QPointF> path;         // pixel waypoints
+    std::vector<QPointF> path2;        // second entrance's pixel waypoints (empty = one entrance)
 
     const data::MapDef &map() const { return data::MAPS[mapIndex]; }
     // This map's waves (falls back to the global list if the map has none).
@@ -192,7 +199,8 @@ signals:
     void won();
     void lost();
     void bugSound(const QString &name);
-    void wildcard(int enemyId);           // a wild bat just appeared (UI toast)   // bug_hop, bug_heal, bug_split, jackpot
+    void wildcard(int enemyId);           // a wild bat just appeared (UI toast)
+    void gust();                          // a wind gust is 1 s away (UI toast)   // bug_hop, bug_heal, bug_split, jackpot
 
 private:
     struct Spawner {
@@ -225,7 +233,9 @@ private:
     struct Route { std::vector<double> segLen, segStart; double length = 0; };
     std::vector<Route> laneRoutes_;
     int nextLane_ = 0;
-    struct PendingBug { data::EnemyType type; double maxHp; double dist; };
+    Route route2_;                               // second entrance (path2) segments, if any
+    int nextRoute_ = 0;                          // round robin of ground spawns over the entrances
+    struct PendingBug { data::EnemyType type; double maxHp; double dist; int route = 0; };
     std::vector<PendingBug> pendingBugs_;
     void applySlow(Enemy &e, double slow, double slowTime);
     void applyPoison(Enemy &e, double dps, double time);
@@ -244,6 +254,7 @@ private:
 
     std::vector<double> segLen_, segStart_;
     double pathLength_ = 0;
+    double prevWindOffset_ = 0;                  // last frame's gust offset (wild bats move by the change)
     std::vector<int> terrain_;                   // cols * rows, -1 = none
     std::vector<bool> pathTiles_;                // COLS * ROWS
     double leakX_ = 0, leakY_ = 0;

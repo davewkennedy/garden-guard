@@ -93,6 +93,19 @@ void Game::loadMap(int index) {
         segLen_.push_back(L);
         pathLength_ += L;
     }
+    // Optional second entrance (claude2-0c): its own route; ground bugs alternate entrances.
+    path2.clear();
+    route2_ = {};
+    nextRoute_ = 0;
+    for (const auto &p : map().path2)
+        path2.emplace_back(p[0] * TILE + TILE / 2, p[1] * TILE + TILE / 2);
+    if (path2.size() < 2) path2.clear();
+    for (size_t i = 0; i + 1 < path2.size(); i++) {
+        double L = std::hypot(path2[i + 1].x() - path2[i].x(), path2[i + 1].y() - path2[i].y());
+        route2_.segStart.push_back(route2_.length);
+        route2_.segLen.push_back(L);
+        route2_.length += L;
+    }
 
     // Sky lanes for flyers (tile centers -> px), with segment lengths for walking by distance.
     skyLanes.clear();
@@ -116,17 +129,18 @@ void Game::loadMap(int index) {
 
     // Path tiles: every in-grid tile a straight segment passes through.
     pathTiles_.assign(cols * rows, false);
-    for (size_t i = 0; i + 1 < tiles.size(); i++) {
-        int c0 = tiles[i][0], r0 = tiles[i][1];
-        int c1 = tiles[i + 1][0], r1 = tiles[i + 1][1];
-        int steps = std::max(std::abs(c1 - c0), std::abs(r1 - r0));
-        for (int s = 0; s <= steps; s++) {
-            int c = c0 + sign(c1 - c0) * s;
-            int r = r0 + sign(r1 - r0) * s;
-            if (c >= 0 && c < cols && r >= 0 && r < rows)
-                pathTiles_[r * cols + c] = true;
+    for (const auto *route : {&tiles, &map().path2})   // both entrances block planting
+        for (size_t i = 0; i + 1 < route->size(); i++) {
+            int c0 = (*route)[i][0], r0 = (*route)[i][1];
+            int c1 = (*route)[i + 1][0], r1 = (*route)[i + 1][1];
+            int steps = std::max(std::abs(c1 - c0), std::abs(r1 - r0));
+            for (int s = 0; s <= steps; s++) {
+                int c = c0 + sign(c1 - c0) * s;
+                int r = r0 + sign(r1 - r0) * s;
+                if (c >= 0 && c < cols && r >= 0 && r < rows)
+                    pathTiles_[r * cols + c] = true;
+            }
         }
-    }
 
     // Terrain (rocks, ponds, lily pads). Path tiles stay path.
     terrain_.assign(cols * rows, -1);
@@ -263,6 +277,7 @@ void Game::spawnEnemy(data::EnemyType type, double hpMult) {
     e.type = type;
     // Flyers take turns across the map's sky lanes; with no lanes they walk the path.
     if (def.flying && !def.wild && !skyLanes.empty()) e.lane = nextLane_++ % int(skyLanes.size());
+    else if (!def.flying && !path2.empty()) e.route = nextRoute_++ % 2;   // two entrances: take turns
     placeBug(e);
     if (def.wild) {
         e.spawnTime = time;
@@ -295,8 +310,9 @@ void Game::flushPendingBugs() {
         Enemy e{};
         e.id = nextId_++;
         e.type = b.type;
-        e.dist = std::clamp(b.dist, 0.0, pathLength_ - 1);
-        pointAt(e.dist, e.x, e.y, e.angle);
+        e.route = b.route;
+        e.dist = std::clamp(b.dist, 0.0, routeLength(e) - 1);
+        placeBug(e);
         e.hp = e.maxHp = b.maxHp;
         e.hitTime = -1;
         if (def.hopEvery > 0) e.abilityTimer = def.hopEvery;
@@ -377,9 +393,10 @@ void Game::fireVine(Tower &t, double dt) {
 
 // Position from dist along the bug's sky lane, or the ground path.
 void Game::placeBug(Enemy &e) {
-    if (e.lane < 0 || e.lane >= int(skyLanes.size())) { pointAt(e.dist, e.x, e.y, e.angle); return; }
-    const auto &pts = skyLanes[e.lane];
-    const Route &r = laneRoutes_[e.lane];
+    const bool second = e.lane < 0 && e.route == 1 && !path2.empty();
+    if (!second && (e.lane < 0 || e.lane >= int(skyLanes.size()))) { pointAt(e.dist, e.x, e.y, e.angle); return; }
+    const auto &pts = second ? path2 : skyLanes[e.lane];
+    const Route &r = second ? route2_ : laneRoutes_[e.lane];
     double d = std::max(0.0, e.dist);
     size_t i = 0;
     while (i < r.segLen.size() - 1 && d > r.segStart[i] + r.segLen[i]) i++;
@@ -391,6 +408,7 @@ void Game::placeBug(Enemy &e) {
 }
 
 double Game::routeLength(const Enemy &e) const {
+    if (e.lane < 0 && e.route == 1 && !path2.empty()) return route2_.length;
     return e.lane >= 0 && e.lane < int(laneRoutes_.size()) ? laneRoutes_[e.lane].length : pathLength_;
 }
 
@@ -489,7 +507,43 @@ Enemy *Game::findEnemy(int id) {
     return nullptr;
 }
 
+namespace {
+constexpr double GUST_LEN = 2.5;    // seconds a gust blows
+constexpr double GUST_WARN = 1.0;   // seconds of warning before it
+}
+
+double Game::windStrength() const {
+    const double every = map().windEvery;
+    if (every <= 0 || time < every) return 0;
+    const double t = std::fmod(time, every);
+    return t < GUST_LEN ? std::pow(std::sin(M_PI * t / GUST_LEN), 2) : 0;   // ease in, then drift back
+}
+
+double Game::windWarning() const {
+    const double every = map().windEvery;
+    if (every <= 0) return 0;
+    const double t = std::fmod(time, every);
+    return t >= every - GUST_WARN ? (t - (every - GUST_WARN)) / GUST_WARN : 0;
+}
+
+int Game::windDir() const {
+    const double every = map().windEvery;
+    if (every <= 0) return 1;
+    return int(std::floor((time + GUST_WARN) / every)) % 2 ? 1 : -1;
+}
+
 void Game::updateEnemies(double dt) {
+    // Wind: announce each gust 1 s ahead, and push airborne flyers sideways while it blows.
+    const double windNow = windOffset();
+    const double windDelta = windNow - prevWindOffset_;
+    prevWindOffset_ = windNow;
+    if (const double every = map().windEvery; every > 0 && time - dt >= 0) {
+        const double tPrev = std::fmod(time - dt, every), tNow = std::fmod(time, every);
+        if (tPrev < every - GUST_WARN && tNow >= every - GUST_WARN) {
+            emit gust();
+            emit bugSound(QStringLiteral("gust_whoosh"));
+        }
+    }
     for (auto &e : enemies) {
         if (!e.alive) continue;
         const data::EnemyDef &def = data::ENEMIES[e.type];
@@ -500,6 +554,8 @@ void Game::updateEnemies(double dt) {
         bool arrived;
         if (def.wild) {
             arrived = steerWildBat(e, dt, mult);
+            if (!e.grounded(time) && windDelta != 0)   // gust shoves the bat, then it drifts back
+                e.y = std::clamp(e.y + windDelta, TILE * 0.3, H - TILE * 0.3);
         } else {
             const double snow = def.flying ? 1.0 : map().bugSpeedMult;   // deep snow slows walkers
             e.dist += def.speed * TILE * mult * snow * dt;
@@ -519,7 +575,10 @@ void Game::updateEnemies(double dt) {
             }
             continue;
         }
-        if (!def.wild) placeBug(e);
+        if (!def.wild) {
+            placeBug(e);
+            if (def.flying && !e.grounded(time)) e.y += windNow;   // lane flyers blown off their lane
+        }
     }
     removeIf(enemies, [](const Enemy &e) { return !e.alive; });
 }
@@ -560,7 +619,7 @@ void Game::killEnemy(Enemy &e) {
         const double mult = e.maxHp / def.hp;
         for (int i = 0; i < def.splitCount; i++)
             pendingBugs_.push_back({child, data::ENEMIES[child].hp * mult,
-                                    e.dist + (i - (def.splitCount - 1) / 2.0) * 14});
+                                    e.dist + (i - (def.splitCount - 1) / 2.0) * 14, e.route});
         addEffect(EffectKind::Split, e.x, e.y, 22);
         emit bugSound(QStringLiteral("bug_split"));
     }

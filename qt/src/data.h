@@ -281,6 +281,12 @@ struct MapDef {
     // and frost slows are scaled by frostMult (the cold makes chilling less effective).
     double bugSpeedMult = 1.0;
     double frostMult = 1.0;
+    // Optional second entrance (claude2-0c): another ground path, same format as `path`, ending
+    // at the house. Ground bugs alternate between the two; flyers ignore it.
+    std::vector<std::array<int, 2>> path2 = {};
+    // Wind gusts: seconds between gusts (0 = calm). Each gust has a 1 s warning, then ~2.5 s
+    // that pushes airborne flyers sideways off their route (vine-grounded flyers are immune).
+    double windEvery = 0;
 };
 
 inline const std::vector<MapDef> MAPS = {
@@ -348,41 +354,42 @@ inline const std::vector<MapDef> MAPS = {
      20, 13, Season::Summer,
      {{6, 7, 1}, {7, 7, 2}, {8, 7, 1}, {9, 7, 1}, {6, 8, 1}, {7, 8, 1}, {8, 8, 2}, {9, 8, 1}}},
     // 6: Amber Woods (22x15, autumn)
-    {"Amber Woods", "Autumn leaves and long switchbacks. The swarms are bigger now, and a wild bat may swoop through.",
+    {"Amber Woods", "Autumn leaves and long switchbacks. The swarms are bigger now, a wild bat may swoop through, and gusts of wind blow flyers off course.",
      {{-1, 2}, {4, 2}, {4, 12}, {9, 12}, {9, 2}, {14, 2}, {14, 12}, {19, 12}, {19, 7}, {22, 7}},
      1.0, 600, "#c99a45", "#c1923f", 6161, false,
      {{{-1, 14}, {7, 14}, {12, 7}, {22, 7}}, {{-1, 0}, {11, 0}, {17, 5}, {22, 7}}},
      {
-      {0.90, {{Ant, 20, 0.36, 0}, {Butterfly, 8, 0.54, 3}, {Cricket, 5, 0.89, 6}}},
-      {1.06, {{Beetle, 10, 0.89, 0}, {Scorpion, 2, 2.68, 4}, {Caterpillar, 4, 1.79, 6}}},
-      {1.22, {{Wasp, 18, 0.31, 0}, {Mosquito, 2, 3.13, 4}, {Butterfly, 10, 0.54, 6}, {GoldenBeetle, 1, 1, 10}}},
-      {1.38, {{Cricket, 10, 0.72, 0}, {Scorpion, 4, 2.24, 4}, {Caterpillar, 4, 1.79, 6}, {Butterfly, 10, 0.45, 10}}},
-      {1.54, {{Ant, 22, 0.31, 0}, {Beetle, 12, 0.72, 2}, {Mosquito, 2, 3.58, 6}, {Snail, 1, 6, 8}, {Caterpillar, 4, 1.79, 12}, {Butterfly, 10, 0.45, 14}, {Bat, 1, 1, 16}}}},
+      {1.03, {{Ant, 20, 0.36, 0}, {Butterfly, 8, 0.54, 3}, {Cricket, 5, 0.89, 6}}},
+      {1.22, {{Beetle, 10, 0.89, 0}, {Scorpion, 2, 2.68, 4}, {Caterpillar, 4, 1.79, 6}}},
+      {1.40, {{Wasp, 18, 0.31, 0}, {Mosquito, 2, 3.13, 4}, {Butterfly, 10, 0.54, 6}, {GoldenBeetle, 1, 1, 10}}},
+      {1.75, {{Cricket, 13, 0.72, 0}, {Scorpion, 5, 2.24, 4}, {Caterpillar, 5, 1.79, 6}, {Butterfly, 13, 0.45, 10}}},
+      {1.95, {{Ant, 29, 0.31, 0}, {Beetle, 16, 0.72, 2}, {Mosquito, 3, 3.58, 6}, {Snail, 1, 6, 8}, {Caterpillar, 5, 1.79, 12}, {Butterfly, 13, 0.45, 14}, {Bat, 1, 1, 16}}}},
      22, 15, Season::Autumn,
-     {{7, 6, 0}, {11, 8, 0}, {17, 4, 0}, {2, 9, 0}, {20, 13, 0}}},
+     {{7, 6, 0}, {11, 8, 0}, {17, 4, 0}, {2, 9, 0}, {20, 13, 0}}, 1.0, 1.0, {}, 12.0},
     // 7: Pumpkin Patch (24x16, autumn)
-    {"Pumpkin Patch", "Harvest time! Huge swarms march between the pumpkins. Spread your plants out: scorpions punish crowds.",
+    {"Pumpkin Patch", "Crossroads! Bugs come from two entrances, the left edge and the top, and their paths cross three times. Plants at a crossing hit both streams. Watch the windy gusts.",
      {{-1, 13}, {5, 13}, {5, 3}, {11, 3}, {11, 12}, {17, 12}, {17, 3}, {21, 3}, {21, 9}, {24, 9}},
      1.0, 660, "#b98a3e", "#b08238", 3110, false,
      {{{-1, 0}, {8, 0.5}, {14, 7.5}, {24, 9}}, {{-1, 15}, {14, 15}, {19, 11}, {24, 9}}},
      {
-      {0.96, {{Ant, 24, 0.33, 0}, {Butterfly, 9, 0.49, 3}, {Cricket, 6, 0.82, 6}}},
-      {1.12, {{Beetle, 12, 0.82, 0}, {Scorpion, 3, 2.45, 4}, {Caterpillar, 4, 1.63, 6}}},
-      {1.28, {{Wasp, 21, 0.29, 0}, {Mosquito, 3, 2.86, 4}, {Butterfly, 12, 0.49, 6}, {GoldenBeetle, 1, 1, 10}}},
-      {1.44, {{Cricket, 12, 0.65, 0}, {Scorpion, 4, 2.04, 4}, {Caterpillar, 4, 1.63, 6}, {Butterfly, 12, 0.41, 10}, {Bat, 1, 1, 8}}},
-      {1.60, {{Ant, 27, 0.29, 0}, {Beetle, 15, 0.65, 2}, {Mosquito, 3, 3.27, 6}, {Snail, 1, 6, 8}, {Caterpillar, 4, 1.63, 12}, {Butterfly, 12, 0.41, 14}, {Bat, 1, 1, 16}}}},
-     24, 16, Season::Autumn},
+      {1.15, {{Ant, 24, 0.33, 0}, {Butterfly, 9, 0.49, 3}, {Cricket, 6, 0.82, 6}}},
+      {1.34, {{Beetle, 12, 0.82, 0}, {Scorpion, 3, 2.45, 4}, {Caterpillar, 4, 1.63, 6}}},
+      {1.54, {{Wasp, 21, 0.29, 0}, {Mosquito, 3, 2.86, 4}, {Butterfly, 12, 0.49, 6}, {GoldenBeetle, 1, 1, 10}}},
+      {1.90, {{Cricket, 16, 0.65, 0}, {Scorpion, 5, 2.04, 4}, {Caterpillar, 5, 1.63, 6}, {Butterfly, 16, 0.41, 10}, {Bat, 1, 1, 8}}},
+      {2.11, {{Ant, 35, 0.29, 0}, {Beetle, 20, 0.65, 2}, {Mosquito, 4, 3.27, 6}, {Snail, 1, 6, 8}, {Caterpillar, 5, 1.63, 12}, {Butterfly, 16, 0.41, 14}, {Bat, 1, 1, 16}}}},
+     24, 16, Season::Autumn,
+     {}, 1.0, 1.0, {{8, -1}, {8, 9}, {14, 9}, {14, 14}, {19, 14}, {19, 9}, {24, 9}}, 12.0},
     // 8: Frost Fen (25x17, winter)
     {"Frost Fen", "Winter arrives. Deep snow slows the bugs on the ground (but not flyers), and frost bites less in the cold. The path doubles back on itself, so plants at the bends hit bugs twice.",
      {{-1, 2}, {10, 2}, {10, 6}, {5, 6}, {5, 11}, {15, 11}, {15, 4}, {20, 4}, {20, 14}, {25, 14}},
      1.0, 740, "#a9c3b8", "#a1bbb0", 1225, false,
      {{{-1, 8.5}, {8, 8.5}, {17, 1}, {25, 14}}, {{-1, 16}, {12, 16}, {18, 9}, {25, 14}}},
      {
-      {0.92, {{Ant, 28, 0.3, 0}, {Butterfly, 10, 0.45, 3}, {Cricket, 7, 0.76, 6}}},
-      {1.06, {{Beetle, 14, 0.76, 0}, {Scorpion, 4, 2.27, 4}, {Caterpillar, 5, 1.51, 6}}},
-      {1.21, {{Wasp, 24, 0.26, 0}, {Mosquito, 4, 2.65, 4}, {Butterfly, 14, 0.45, 6}, {GoldenBeetle, 1, 1, 10}}},
-      {1.35, {{Cricket, 14, 0.6, 0}, {Scorpion, 5, 1.89, 4}, {Caterpillar, 5, 1.51, 6}, {Butterfly, 14, 0.38, 10}}},
-      {1.49, {{Ant, 32, 0.26, 0}, {Beetle, 18, 0.6, 2}, {Mosquito, 4, 3.02, 6}, {Snail, 2, 6, 8}, {Caterpillar, 5, 1.51, 12}, {Butterfly, 14, 0.38, 14}, {Bat, 1, 1, 16}}}},
+      {1.02, {{Ant, 28, 0.3, 0}, {Butterfly, 10, 0.45, 3}, {Cricket, 7, 0.76, 6}}},
+      {1.18, {{Beetle, 14, 0.76, 0}, {Scorpion, 4, 2.27, 4}, {Caterpillar, 5, 1.51, 6}}},
+      {1.34, {{Wasp, 24, 0.26, 0}, {Mosquito, 4, 2.65, 4}, {Butterfly, 14, 0.45, 6}, {GoldenBeetle, 1, 1, 10}}},
+      {1.65, {{Cricket, 18, 0.6, 0}, {Scorpion, 6, 1.89, 4}, {Caterpillar, 6, 1.51, 6}, {Butterfly, 18, 0.38, 10}}},
+      {1.83, {{Ant, 42, 0.26, 0}, {Beetle, 23, 0.6, 2}, {Mosquito, 5, 3.02, 6}, {Snail, 2, 6, 8}, {Caterpillar, 6, 1.51, 12}, {Butterfly, 18, 0.38, 14}, {Bat, 1, 1, 16}}}},
      25, 17, Season::Winter,
      {{17, 6, 1}, {18, 6, 1}, {17, 7, 1}, {18, 7, 1}, {17, 8, 1}, {18, 8, 1}, {18, 9, 1}, {16, 7, 2}, {19, 8, 2}}, 0.85, 0.8},
     // 9: Snowdrift Hollow (27x18, winter)
@@ -394,8 +401,8 @@ inline const std::vector<MapDef> MAPS = {
       {0.54, {{Ant, 32, 0.28, 0}, {Butterfly, 12, 0.42, 3}, {Cricket, 8, 0.71, 6}}},
       {0.62, {{Beetle, 16, 0.71, 0}, {Scorpion, 4, 2.12, 4}, {Caterpillar, 6, 1.41, 6}}},
       {0.70, {{Wasp, 28, 0.25, 0}, {Mosquito, 4, 2.47, 4}, {Butterfly, 16, 0.42, 6}, {GoldenBeetle, 1, 1, 10}}},
-      {0.78, {{Cricket, 16, 0.57, 0}, {Scorpion, 6, 1.77, 4}, {Caterpillar, 6, 1.41, 6}, {Butterfly, 16, 0.35, 10}, {Bat, 1, 1, 8}}},
-      {0.86, {{Ant, 36, 0.25, 0}, {Beetle, 20, 0.57, 2}, {Mosquito, 4, 2.83, 6}, {Snail, 2, 6, 8}, {Caterpillar, 6, 1.41, 12}, {Butterfly, 16, 0.35, 14}, {Bat, 1, 1, 16}}}},
+      {0.86, {{Cricket, 21, 0.57, 0}, {Scorpion, 8, 1.77, 4}, {Caterpillar, 8, 1.41, 6}, {Butterfly, 21, 0.35, 10}, {Bat, 1, 1, 8}}},
+      {0.95, {{Ant, 47, 0.25, 0}, {Beetle, 26, 0.57, 2}, {Mosquito, 5, 2.83, 6}, {Snail, 2, 6, 8}, {Caterpillar, 8, 1.41, 12}, {Butterfly, 21, 0.35, 14}, {Bat, 1, 1, 16}}}},
      27, 18, Season::Winter,
      {{6, 14, 1}, {7, 14, 1}, {8, 14, 1}, {6, 15, 1}, {7, 15, 1}, {8, 15, 1}, {9, 15, 1}, {20, 4, 0}, {25, 13, 0}, {10, 8, 0}}, 0.85, 0.8},
     // 10: Evergreen Summit (30x20, winter)
@@ -404,11 +411,11 @@ inline const std::vector<MapDef> MAPS = {
      1.0, 960, "#c9dbe0", "#c0d3d8", 3030, false,
      {{{-1, 0}, {14, 0}, {25, 6}, {30, 10}}, {{-1, 19}, {14, 19}, {24, 13}, {30, 10}}, {{-1, 8.5}, {10, 8.5}, {18, 14}, {30, 10}}},
      {
-      {1.14, {{Ant, 36, 0.27, 0}, {Butterfly, 14, 0.4, 3}, {Cricket, 9, 0.67, 6}}},
-      {1.30, {{Beetle, 18, 0.67, 0}, {Scorpion, 4, 2, 4}, {Caterpillar, 7, 1.33, 6}}},
-      {1.46, {{Wasp, 32, 0.23, 0}, {Mosquito, 4, 2.33, 4}, {Butterfly, 18, 0.4, 6}, {GoldenBeetle, 1, 1, 10}}},
-      {1.62, {{Cricket, 18, 0.53, 0}, {Scorpion, 7, 1.67, 4}, {Caterpillar, 7, 1.33, 6}, {Butterfly, 18, 0.33, 10}, {Bat, 1, 1, 8}}},
-      {1.78, {{Ant, 40, 0.23, 0}, {Beetle, 22, 0.53, 2}, {Mosquito, 4, 2.67, 6}, {Snail, 3, 6, 8}, {Caterpillar, 7, 1.33, 12}, {Butterfly, 18, 0.33, 14}, {Bat, 1, 1, 16}}}},
+      {1.31, {{Ant, 36, 0.27, 0}, {Butterfly, 14, 0.4, 3}, {Cricket, 9, 0.67, 6}}},
+      {1.49, {{Beetle, 18, 0.67, 0}, {Scorpion, 4, 2, 4}, {Caterpillar, 7, 1.33, 6}}},
+      {1.68, {{Wasp, 32, 0.23, 0}, {Mosquito, 4, 2.33, 4}, {Butterfly, 18, 0.4, 6}, {GoldenBeetle, 1, 1, 10}}},
+      {2.05, {{Cricket, 23, 0.53, 0}, {Scorpion, 9, 1.67, 4}, {Caterpillar, 9, 1.33, 6}, {Butterfly, 23, 0.33, 10}, {Bat, 1, 1, 8}}},
+      {2.25, {{Ant, 52, 0.23, 0}, {Beetle, 29, 0.53, 2}, {Mosquito, 5, 2.67, 6}, {Snail, 3, 6, 8}, {Caterpillar, 9, 1.33, 12}, {Butterfly, 23, 0.33, 14}, {Bat, 1, 1, 16}}}},
      30, 20, Season::Winter,
      {{8, 8, 0}, {24, 6, 0}, {14, 15, 0}, {5, 14, 1}, {6, 14, 1}, {7, 14, 1}, {6, 15, 1}, {7, 15, 1}, {8, 15, 1}, {6, 16, 2}}, 0.85, 0.8},
 };

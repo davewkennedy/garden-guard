@@ -209,6 +209,9 @@ QHash<QString, std::vector<Part>> recipes() {
     // Wild bat appears: two thin high squeaks.
     r["bug_screech"] = {tone(0, O::Square, 2600, 3400, 0.07, 0.07, 0.003, F::Bandpass, 3000),
                         tone(0.1, O::Square, 2800, 3700, 0.09, 0.07, 0.003, F::Bandpass, 3200)};
+    // Wind gust warning: a soft rising whoosh.
+    r["gust_whoosh"] = {noise(0, F::Bandpass, 450, 1.1, 0.32, 0.4, 0.7),
+                        noise(0.25, F::Bandpass, 900, 0.8, 0.18, 0.3, 0.9)};
     // Scorpion spit: a short wet "ptoo" (the splat on landing reuses bug_split).
     r["bug_spit"] = {tone(0, O::Sine, 420, 900, 0.09, 0.22, 0.003),
                      noise(0, F::Bandpass, 1400, 0.08, 0.25, 0.002, 3)};

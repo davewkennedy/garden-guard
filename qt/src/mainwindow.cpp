@@ -134,6 +134,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     connect(board_, &BoardWidget::pointClicked, this, [this](double x, double y) { lastClick_ = QPointF(x, y); });
     connect(board_, &BoardWidget::tileClicked, this, &MainWindow::onClick);
     connect(board_, &BoardWidget::tileDoubleClicked, this, &MainWindow::onDoubleClick);
+    connect(&game_, &Game::gust, this, [this] { board_->showToast(QStringLiteral("🌬️ A gust of wind! Flyers are blown off course")); });
     connect(&game_, &Game::wildcard, this, [this] { board_->showToast(QStringLiteral("🦇 A wild bat appears! Catch it for 30 coins!")); });
     connect(board_, &BoardWidget::hoverLeft, this, [this] { board_->view.hover.reset(); });
 
@@ -199,6 +200,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
         }
     }
     buildMapSelect();
+    buildJournal();
     end_ = buildOverlay(endTitle_, endText_, again);
     again->setText("Play again");
     connect(again, &QPushButton::clicked, this, &MainWindow::playAgain);
@@ -298,6 +300,11 @@ QWidget *MainWindow::buildHeader() {
     map_->setToolTip("Campaign map");
     for (QLabel *l : {map_, coins_, lives_, wave_}) h->addWidget(l);
     h->addStretch(1);
+
+    auto *journalBtn = button(QStringLiteral("📖"), {}, "iconBtn");
+    journalBtn->setToolTip("Garden Journal (J)");
+    connect(journalBtn, &QPushButton::clicked, this, [this] { toggleJournal(); });
+    h->addWidget(journalBtn);
 
     autoBtn_ = button(QStringLiteral("🤖"), {}, "iconBtn");
     autoBtn_->setToolTip("Autopilot: the AI plays the whole campaign at 2× (A)");
@@ -531,7 +538,7 @@ QWidget *MainWindow::buildOverlay(QLabel *&title, QLabel *&text, QPushButton *&b
 
 void MainWindow::resizeEvent(QResizeEvent *e) {
     QMainWindow::resizeEvent(e);
-    for (QWidget *o : {intro_, end_, next_, bugCard_, mapSelect_})
+    for (QWidget *o : {intro_, end_, next_, bugCard_, mapSelect_, journal_})
         if (o) o->setGeometry(centralWidget()->rect());
 }
 
@@ -539,7 +546,7 @@ void MainWindow::resizeEvent(QResizeEvent *e) {
 
 bool MainWindow::overlayOpen() const {
     return intro_->isVisible() || end_->isVisible() || next_->isVisible() || bugCard_->isVisible() ||
-           (mapSelect_ && mapSelect_->isVisible());
+           (mapSelect_ && mapSelect_->isVisible()) || (journal_ && journal_->isVisible());
 }
 
 // Bugs that appear on this map's waves but on no earlier map get introduced.
@@ -576,9 +583,35 @@ void MainWindow::showNewBugs() {
         if (!def.counters.isEmpty()) line += ": " + def.counters.toHtmlEscaped();
         plants << line;
     }
-    if (lines.isEmpty() && plants.isEmpty()) return;
+    // ...and this map's special rules, so nothing invisible surprises the player (claude2-0c).
+    // Always listed (not just the ones new since the last map), so Continue/map select runs see them.
+    QStringList rules;
+    {
+        const data::MapDef &md = data::MAPS[m];
+        const auto &ws = md.waves.empty() ? data::WAVES : md.waves;
+        bool wildBats = false;
+        for (const auto &w : ws)
+            for (const auto &grp : w.groups) wildBats = wildBats || data::ENEMIES[grp.enemy].wild;
+        bool water = false, rocks = false;
+        for (const auto &t : md.terrain) {
+            water = water || t[2] == data::TERRAIN_WATER || t[2] == data::TERRAIN_LILY;
+            rocks = rocks || t[2] == data::TERRAIN_ROCK;
+        }
+        if (md.night) rules << QStringLiteral("🌙 <b>Night</b>: the garden is dark, so watch closely");
+        if (wildBats) rules << QStringLiteral("🦇 <b>Wild bats</b> ignore the sky lanes and swoop straight for your house");
+        if (md.windEvery > 0)
+            rules << QStringLiteral("🌬️ <b>Wind gusts</b> blow flyers off course; a 🍇 Grape Vine keeps them grounded");
+        if (md.bugSpeedMult < 1)
+            rules << QStringLiteral("❄️ <b>Deep snow</b> slows ground bugs, but frost is weaker");
+        if (water) rules << QStringLiteral("🪷 <b>Ponds</b>: plant on the lily pads, not the water");
+        if (rocks) rules << QStringLiteral("🪨 <b>Boulders</b> block planting");
+        if (!md.path2.empty()) rules << QStringLiteral("🔀 <b>Two entrances</b>: bugs come from two directions");
+    }
+    if (lines.isEmpty() && plants.isEmpty() && rules.isEmpty()) return;
     const QString bugsWord = lines.size() == 1 ? "New bug" : "New bugs";
-    if (plants.isEmpty())
+    if (lines.isEmpty() && plants.isEmpty())
+        bugCardTitle_->setText(QString("%1: watch out!").arg(data::MAPS[m].name));
+    else if (plants.isEmpty() && !lines.isEmpty())
         bugCardTitle_->setText(bugsWord + "!");
     else if (lines.isEmpty())
         bugCardTitle_->setText(plants.size() == 1 ? "New plant!" : "New plants!");
@@ -589,6 +622,9 @@ void MainWindow::showNewBugs() {
     if (!plants.isEmpty())
         html += QString("%1<span style=\"color:#2f8a3a; font-weight:800;\">🌱 Unlocked in your shop:</span><br>%2")
                     .arg(lines.isEmpty() ? "" : "<br><br>", plants.join("<br>"));
+    if (!rules.isEmpty())
+        html += QString("%1<span style=\"color:#a0683c; font-weight:800;\">🗺️ On this map:</span><br>%2")
+                    .arg(html.isEmpty() ? "" : "<br><br>", rules.join("<br>"));
     bugCardText_->setTextFormat(Qt::RichText);
     bugCardText_->setText(html);
     bugCard_->show();
@@ -854,7 +890,13 @@ void MainWindow::onClick(int col, int row) {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *e) {
-    if (overlayOpen() || (e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+    // J opens the 📖 journal, or closes it (the one key that works while its card is open).
+    if (e->key() == Qt::Key_J && !e->isAutoRepeat() && !(e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) &&
+        (journal_ && (journal_->isVisible() || !overlayOpen()))) {
+        toggleJournal();
+        return;
+    }
+    if (overlayOpen() ||(e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
         QMainWindow::keyPressEvent(e);
         return;
     }
@@ -972,6 +1014,7 @@ void MainWindow::awardStars() {
 
 void MainWindow::showMapCleared() {
     clearView();
+    if (game_.isLastMap()) { showEnd(true); return; }   // no next map: the campaign is won
     const data::MapDef &next = data::MAPS[game_.mapIndex + 1];
     const int stars = starsFor(mapStartLives_ - game_.lives);
     nextTitle_->setText(QString("%1 cleared!\n%2").arg(game_.map().name, starsText(stars)));
@@ -1094,9 +1137,23 @@ bool MainWindow::setupScene(const QString &scene_) {
         showMapSelect(game_.totalMaps - 1);
         return true;
     }
+    if (scene == "journal") {   // the 📖 journal as of the target map ("journal4")
+        intro_->hide();
+        {
+            QSignalBlocker quiet(&game_);
+            while (game_.mapIndex < targetMap) {
+                game_.phase = Phase::MapCleared;
+                game_.nextMap();
+            }
+        }
+        syncUi();
+        toggleJournal();
+        return true;
+    }
     const QStringList known = {"play", "placing", "mapclear", "win", "lose", "night", "celebrate", "bugs",
-                               "aim", "newbugs", "focus"};
+                               "aim", "newbugs", "focus", "vine"};
     if (!known.contains(scene)) return false;
+    if (scene == "vine" && targetMap == 0) targetMap = 1;   // grape vines and butterflies start on map 2
     intro_->hide();
 
     // A busy mid-game board: one of every plant, bugs on the path, a tower selected.
@@ -1132,10 +1189,40 @@ bool MainWindow::setupScene(const QString &scene_) {
     plant("mushroom", 3, 5, 1);
     plant("chili", 5, 5, 2);
     plant("sunflower", 0, 8, 1);
+    int grape = -1;
+    if (scene == "vine" && !game_.map().skyLanes.empty()) {
+        // A grape vine on the free tile nearest the middle of the first sky lane.
+        const auto &lane = game_.map().skyLanes.front();
+        const auto &a = lane[std::min<size_t>(1, lane.size() - 1)], &b = lane[std::min<size_t>(2, lane.size() - 1)];
+        const double lx = (a[0] + b[0]) / 2, ly = (a[1] + b[1]) / 2;
+        std::vector<std::pair<double, std::pair<int, int>>> tiles;
+        for (int r = 0; r < game_.rows; r++)
+            for (int c = 0; c < game_.cols; c++) tiles.push_back({std::hypot(c - lx, r - ly), {c, r}});
+        std::sort(tiles.begin(), tiles.end());
+        for (const auto &tile : tiles)
+            if ((grape = plant("grape", tile.second.first, tile.second.second, 2)) >= 0) break;
+    }
     game_.coins = 1234;
     // "bugs" stages the final wave, where every new bug type shows up.
     game_.wave = scene == "bugs" ? game_.totalWaves - 1 : std::min(3, game_.totalWaves - 1);    game_.startWave();
     for (int i = 0; i < 60 * (scene == "bugs" ? 24 : 9); i++) game_.update(1.0 / 60);
+    if (scene == "vine") {
+        // Keep playing until the vine has a flyer lassoed, so the tether shows.
+        auto lassoed = [this] {
+            for (const Enemy &e : game_.enemies)
+                if (e.alive && e.grounded(game_.time) && e.vineBy >= 0) return true;
+            return false;
+        };
+        game_.lives = 999;   // staging only: leaks must not end the run before a lasso
+        for (int i = 0; i < 60 * 60 && !lassoed(); i++) {
+            if (game_.phase == Phase::Build) game_.startWave();
+            else if (game_.phase != Phase::Wave) break;
+            game_.update(1.0 / 60);
+        }
+        for (int i = 0; i < 20 && lassoed(); i++) game_.update(1.0 / 60);   // a moment into the pull
+        board_->view.selectedId = grape;
+        game_.lives = data::START_LIVES;   // the lasso lasts 3.5 s, longer than the screenshot delay
+    }
 
     if (scene == "celebrate") {
         // Fire the confetti shortly before the screenshot (taken at 800ms) so it's mid-air.
@@ -1168,6 +1255,8 @@ bool MainWindow::setupScene(const QString &scene_) {
         board_->view.selectedId = cactus;
         board_->view.aimingId = cactus;
         board_->view.hover = View::Hover{10, 5, true};
+    } else if (scene == "vine") {
+        // Staged above: the grape vine is selected and the lasso frozen mid-pull.
     } else if (scene == "play" || scene == "night" || scene == "bugs") {
         board_->view.selectedId = selected;
         board_->showToast(QString("Wave %1 cleared! +40 %2  ·  Sunflowers +28 %2").arg(game_.wave - 1).arg(COIN));

@@ -23,7 +23,8 @@ int main(int argc, char *argv[]) {
     QCommandLineOption sizeOpt("size", "Window size WxH.", "size");
     QCommandLineOption autoOpt("autopilot", "Start with the autopilot at this speed (1-3).", "speed");
     QCommandLineOption delayOpt("delay", "Milliseconds before the screenshot.", "ms", "800");
-    for (QCommandLineOption *o : {&shotOpt, &sceneOpt, &sizeOpt, &autoOpt, &delayOpt}) {
+    QCommandLineOption mapOpt("start-map", "Start a fresh run on this map (1-based).", "n");
+    for (QCommandLineOption *o : {&shotOpt, &sceneOpt, &sizeOpt, &autoOpt, &delayOpt, &mapOpt}) {
         o->setFlags(QCommandLineOption::HiddenFromHelp);
         parser.addOption(*o);
     }
@@ -35,6 +36,7 @@ int main(int argc, char *argv[]) {
         if (wh.size() == 2) window.resize(wh[0].toInt(), wh[1].toInt());
     }
     window.show();
+    if (parser.isSet(mapOpt)) window.startAtMap(parser.value(mapOpt).toInt() - 1);
     if (parser.isSet(autoOpt)) window.startAutopilot(parser.value(autoOpt).toInt());
 
     if (parser.isSet(shotOpt)) {

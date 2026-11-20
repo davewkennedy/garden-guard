@@ -160,8 +160,49 @@ bool Autopilot::upgradeOne() {
     return pick && g_.upgradeTower(pick->id);
 }
 
+// Focus fire: when a high-value bug is on the board (snail boss, golden beetle, wild bat,
+// or a mosquito healing a crowd), point every in-range attacker that can hit it at it.
+// Plants already focused on a live bug are left alone, so it doesn't re-focus every think.
+void Autopilot::focus() {
+    if (std::getenv("AUTOPILOT_NOFOCUS")) return;   // for A/B tuning
+    auto priority = [&](const Enemy &e) {
+        const data::EnemyDef &d = data::ENEMIES[e.type];
+        if (d.boss) return 4;
+        if (d.golden) return 3;
+        if (d.wild) return 2;
+        if (d.healEvery > 0) {
+            int near = 0;
+            const double r = d.healRadius * data::TILE;
+            for (const Enemy &o : g_.enemies)
+                if (o.alive && o.id != e.id && std::hypot(o.x - e.x, o.y - e.y) <= r) near++;
+            return near >= 2 ? 1 : 0;
+        }
+        return 0;
+    };
+    const Enemy *target = nullptr;
+    int best = 0;
+    for (const Enemy &e : g_.enemies) {
+        if (!e.alive) continue;
+        int p = priority(e);
+        if (p > best || (p == best && p > 0 && target && e.dist > target->dist)) { best = p; target = &e; }
+    }
+    if (!target) return;
+    std::vector<int> ids;
+    for (const Tower &t : g_.towers) {
+        if (!attacks(t.type) || t.focusId == target->id) continue;
+        if (t.focusId >= 0 && std::any_of(g_.enemies.begin(), g_.enemies.end(),
+                                          [&](const Enemy &e) { return e.alive && e.id == t.focusId; }))
+            continue;   // already busy with another live target
+        const double range = data::TOWERS[t.type].levels[t.level].range * data::TILE;
+        if (std::hypot(target->x - t.x, target->y - t.y) > range || !g_.canHit(t, *target)) continue;
+        ids.push_back(t.id);
+    }
+    if (!ids.empty()) g_.focusFire(ids, target->id);
+}
+
 bool Autopilot::think() {
     if (g_.isOver()) return false;
+    focus();
     // Early on, prefer new plants but never sit on coins; later, prefer upgrades.
     const char *mode = std::getenv("AUTOPILOT_MODE");   // for tuning: "save" or "spend"
     const bool save = mode && QString(mode) == "save";

@@ -17,6 +17,7 @@ public:
 private:
     bool placeNext();
     bool upgradeOne();
+    void focus();                // focus fire on high-value bugs (bosses, jackpots, healers)
     double tileScore(int type, int col, int row) const;
 
     Game &g_;
