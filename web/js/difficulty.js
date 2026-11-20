@@ -25,7 +25,10 @@ var Difficulty = (function () {
     'background:#f4faef;color:#222;font:600 14px system-ui,-apple-system,"Segoe UI",sans-serif;cursor:pointer;' +
     'touch-action:manipulation;}' +
     '.ggd button[aria-pressed="true"]{background:#4caf50;color:#fff;border-color:#3d8b40;}' +
-    '.ggd button:focus-visible{outline:2px solid #2e7d32;outline-offset:2px;}';
+    '.ggd button:focus-visible{outline:2px solid #2e7d32;outline-offset:2px;}' +
+    // Touch screens can't show the tooltips, so the chosen level's tip is written under the pills.
+    '.ggd-tip{display:none;margin-top:4px;text-align:center;font-size:12px;color:#64735a;}' +
+    '@media (hover:none) and (pointer:coarse){.ggd-tip{display:block;}}';
 
   function clamp(d) {
     d = parseInt(d, 10);
@@ -72,12 +75,17 @@ var Difficulty = (function () {
         if (typeof Sfx !== 'undefined') Sfx.play('click');
         set(i);
         buttons.forEach(function (o, j) { o.setAttribute('aria-pressed', j === i ? 'true' : 'false'); });
+        tip.textContent = TIPS[i];
         if (onChange) onChange(i);
       });
       row.appendChild(b);
       return b;
     });
+    var tip = document.createElement('div');
+    tip.className = 'ggd-tip';
+    tip.textContent = TIPS[current];
     el.appendChild(row);
+    el.appendChild(tip);
   }
 
   return { get: get, set: set, label: label, apply: apply, render: render, NAMES: NAMES, TIPS: TIPS };

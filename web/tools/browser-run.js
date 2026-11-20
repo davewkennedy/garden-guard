@@ -6,6 +6,8 @@
 //   node tools/browser-run.js [options]            (WSL, from the gardenguard++web folder)
 //     --query "scene=play&map=3"   URL params for index.html
 //     --size pc|iphone|android     viewport (1280x800 / 844x390 / 915x412); phones = mobile + touch
+//            iphone-portrait|ipad|ipad-portrait|se   (390x844 / 1180x820 / 820x1180 / 667x375, touch)
+//     --rotate yes|no              check the "turn sideways" #rotate overlay is (yes) / is not (no) shown
 //     --seconds N                  run this long (real time) after load, collecting errors (default 3)
 //     --touch                      touch QA: tap a shop item, tap a tile -> plant placed; tap/double-tap
 //                                  the plant; long-press; 2-finger pinch -> View.zoom changes
@@ -32,7 +34,8 @@ const ROOT = path.join(__dirname, '..');
 const argv = process.argv.slice(2);
 const opt = (name, dflt) => { const i = argv.indexOf('--' + name); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : dflt; };
 const flag = (name) => argv.includes('--' + name);
-const SIZES = { pc: [1280, 800, false], iphone: [844, 390, true], android: [915, 412, true] };
+const SIZES = { pc: [1280, 800, false], iphone: [844, 390, true], android: [915, 412, true],
+    'iphone-portrait': [390, 844, true], ipad: [1180, 820, true], 'ipad-portrait': [820, 1180, true], se: [667, 375, true] };
 const size = opt('size', 'pc');
 const [W, H, MOBILE] = SIZES[size] || SIZES.pc;
 const campaign = flag('campaign');
@@ -170,6 +173,20 @@ async function touchTests(cdp) {
             (tilePx < limit ? '  (note: expected a zoom-first tap here)' : ''));
     }
     check(!!placed && placed.type === plan.type, `tap tile ${plan.col},${plan.row} -> ${plan.name} planted (coins ${plan.coins} -> ${await cdp.eval('UI.game.coins')})`);
+    // Small tiles: a press held >= 350 ms (aimed with the loupe) plants on lift without zooming.
+    if (tilePx < limit) {
+        await cdp.eval('View.reset()');
+        if (await cdp.eval('UI.view.placing') !== plan.type) { await tap(cdp, plan.item); await sleep(150); }
+        const t2 = await cdp.eval(`(() => { const g = UI.game, ai = new Autopilot(g); let b = -1, col = -1, row = -1;
+            for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) { if (!g.canPlace(c, r)) continue;
+                const s = ai.tileScore(${plan.type}, c, r); if (s > b) { b = s; col = c; row = r; } }
+            const cr = document.getElementById('board').getBoundingClientRect(), p = View.worldToScreen(col * 64 + 32, row * 64 + 32);
+            return { col, row, x: cr.x + p.x, y: cr.y + p.y, n: g.towers.length }; })()`);
+        await tap(cdp, t2, 500);
+        await sleep(250);
+        const after = await cdp.eval(`({ z: View.zoom, ok: !!UI.game.towers.find(t => t.col === ${t2.col} && t.row === ${t2.row}) })`);
+        check(after.ok && after.z <= 1.001, `small tiles: 500 ms hold on ${t2.col},${t2.row} plants directly, no zoom (View.zoom ${after.z.toFixed(2)})`);
+    }
     await cdp.eval('UI.view.placing = -1');
     plan.tile = await tilePos();
     // 2) tap the plant -> selected; double-tap -> group of its kind
@@ -239,7 +256,7 @@ async function main() {
         await cdp.send('Log.enable');
         await cdp.send('Page.enable');
         await cdp.send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: MOBILE ? 3 : 1, mobile: MOBILE,
-            screenOrientation: MOBILE ? { type: 'landscapePrimary', angle: 90 } : { type: 'landscapePrimary', angle: 0 } });
+            screenOrientation: H > W ? { type: 'portraitPrimary', angle: 0 } : { type: 'landscapePrimary', angle: MOBILE ? 90 : 0 } });
         if (MOBILE) await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
         // Until renderer.js lands: if no Renderer global exists after the page's scripts ran, stub it
         // (every method a no-op) so the UI can still be tested. Reported below; --no-stub disables.
@@ -253,6 +270,15 @@ async function main() {
         console.log(`${stamp()} loaded: ${fmt(await cdp.eval(STATE))}`);
         if (await cdp.eval('!!window.__rendererStubbed')) console.log('  [note] js/renderer.js missing: Renderer STUBBED (no drawing)');
 
+        // "Turn your phone sideways" overlay: --rotate yes|no checks whether #rotate covers the screen.
+        if (opt('rotate')) {
+            const r = await cdp.eval(`(() => { const el = document.getElementById('rotate'); if (!el) return null;
+                const cs = getComputedStyle(el), b = el.getBoundingClientRect();
+                const top = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+                return { display: cs.display, covers: b.width >= innerWidth - 1 && b.height >= innerHeight - 1 && el.contains(top) }; })()`);
+            if (opt('rotate') === 'yes') check(r && r.display === 'flex' && r.covers, `#rotate overlay shown and covering the screen (display ${r && r.display}, covers ${r && r.covers})`);
+            else check(r && r.display === 'none', `#rotate overlay not shown (display ${r && r.display})`);
+        }
         if (flag('touch')) await touchTests(cdp);
 
         if (flag('soak')) {

@@ -200,7 +200,7 @@ var Renderer = (function () {
     var res_ = 0;          // device px per logical px the glyph/pot caches are built for
     var glyphs = {};
     var pots = {};
-    var bg = null, bgKey = '', bgRes = 0, bgWant = 0, bgWantSince = 0;
+    var bg = null, bgKey = '', bgRes = 0;
 
     function glyph(ch, size, res) {
         res = res || res_;
@@ -264,32 +264,58 @@ var Renderer = (function () {
     // Background resolution steps: rebuilt only when the zoom crosses a step (and has settled).
     var BG_STEPS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6];
     function bgStepFor(devScale) {
-        var maxByPixels = Math.sqrt(16e6 / (W * H));   // <= ~16 Mpx (phones' canvas limits)
+        // <= ~6 Mpx (24 MB): bigger canvases fail on phones (iOS caps total canvas memory) and
+        // a failed allocation blanks the whole board.
+        var maxByPixels = Math.max(0.5, Math.sqrt(6e6 / (W * H)));
         var want = Math.min(devScale, maxByPixels);
         for (var i = 0; i < BG_STEPS.length; i++) if (BG_STEPS[i] >= want - 1e-6) return Math.min(BG_STEPS[i], maxByPixels);
         return Math.min(BG_STEPS[BG_STEPS.length - 1], maxByPixels);
     }
 
-    function setupScale(game, scale, dpr, now) {
+    // Two backgrounds per map (and fit size): one at the fit resolution, built immediately, and
+    // one for zoomed-in views (zoom-4 resolution, within the pixel budget), built once while the
+    // zoom is still. A pinch never rebuilds anything: it just picks the sharper one available.
+    var bgLo = null, bgHi = null, loRes = 0, hiRes = 0, hiDue = 0, lastScale = 0, scaleChangedAt = 0;
+    function buildSafe(game, step) {
+        // If a big canvas can't be allocated, step down instead of blanking the board.
+        for (var s = step; ; s = Math.max(0.5, s / 2)) {
+            try { return { img: buildBackground(game, s), res: s }; }
+            catch (e) { if (s <= 0.5) throw e; }
+        }
+    }
+
+    function setupScale(game, scale, dpr, now, fit) {
         W = game.W; H = game.H; GRID_COLS = game.cols; GRID_ROWS = game.rows;
         FX_UI = clamp(0.7 / scale, 1, 2.2);
         FX_PLANT = Math.min(FX_UI, 0.8 / (2 * POT_R / TILE));
         FX_BUG = Math.min(FX_UI, 0.75 / (ENEMY_SIZE / TILE));
         // Sprite caches: device px per logical px (incl. the readability boost), in 0.5 steps.
-        var want = clamp(Math.ceil(scale * dpr * FX_UI * 2) / 2, 0.5, 8);
-        if (want !== res_) { res_ = want; glyphs = {}; pots = {}; }
-        // Background.
-        var key = game.mapIndex + '|' + W + 'x' + H;
-        var step = bgStepFor(scale * dpr);
-        if (step !== bgWant) { bgWant = step; bgWantSince = now; }
-        // Rebuild now for a new map or a big jump (first real size after layout, rotation);
-        // during a pinch wait until the zoom settles.
-        var jump = step > bgRes * 1.9 || step < bgRes / 1.9;
-        if (!bg || key !== bgKey || (step !== bgRes && (jump || now - bgWantSince > 0.25))) {
+        // Keyed by resolution (not cleared), so a pinch reuses levels it has already rendered.
+        // While the zoom is changing (pinch/wheel) keep the current level: rasterizing color emoji
+        // at each new level mid-gesture is what made pinch frames slow. Crisp again 0.2 s after.
+        if (scale !== lastScale) { lastScale = scale; scaleChangedAt = now; }
+        var wantRes = clamp(Math.ceil(scale * dpr * FX_UI * 2) / 2, 0.5, 8);
+        if (!res_ || now - scaleChangedAt > 0.2) res_ = wantRes;
+        if (Object.keys(glyphs).length > 3000) { glyphs = {}; pots = {}; }
+        // Backgrounds.
+        fit = fit || scale;
+        var lo = bgStepFor(fit * dpr), hi = bgStepFor(fit * dpr * 4);
+        var key = game.mapIndex + '|' + W + 'x' + H + '|' + lo;
+        if (!bgLo || key !== bgKey) {
             bgKey = key;
-            bgRes = step;
-            bg = buildBackground(game, step);
+            var b = buildSafe(game, lo);
+            bgLo = b.img; loRes = b.res;
+            bgHi = null; hiRes = 0;
+            hiDue = hi > lo * 1.2 ? now + 0.5 : Infinity;
         }
+        if (!bgHi && now >= hiDue && now - scaleChangedAt > 0.3) {
+            var bh = buildSafe(game, hi);
+            bgHi = bh.img; hiRes = bh.res;
+        }
+        // The hi-res image only when it's near its native scale (downscaling 6 Mpx every frame
+        // is expensive); a slightly upscaled lo-res image in between looks fine.
+        bg = bgHi && scale * dpr > hiRes * 0.7 ? bgHi : bgLo;
+        bgRes = bg === bgHi ? hiRes : loRes;
     }
 
     // ---------- background ----------
@@ -312,15 +338,21 @@ var Renderer = (function () {
                 g.fillRect(c * TILE, r * TILE, TILE, TILE);
             }
         }
-        // Grass blades.
+        // Grass blades (batched into two paths, one per shade; same rand() order).
+        var darkBlades = new Path2D(), lightBlades = new Path2D();
         for (i = 0; i < 1100; i++) {
             var x = rand() * W, y = rand() * H;
             var shade = rand();
             var lean = (rand() - 0.5) * 3;
             var len = 3 + rand() * 4;
-            pen(g, shade < 0.5 ? rgba(40, 110, 40, 0.35) : rgba(190, 240, 140, 0.35), 1.2, true);
-            line(g, x, y, x + lean, y - len);
+            var bp = shade < 0.5 ? darkBlades : lightBlades;
+            bp.moveTo(x, y);
+            bp.lineTo(x + lean, y - len);
         }
+        pen(g, rgba(40, 110, 40, 0.35), 1.2, true);
+        g.stroke(darkBlades);
+        pen(g, rgba(190, 240, 140, 0.35), 1.2, true);
+        g.stroke(lightBlades);
 
         // Season wash.
         var season = nm('Season', map.season);
@@ -330,10 +362,15 @@ var Renderer = (function () {
         else if (season === 'Winter') {
             g.fillStyle = rgba(215, 228, 245, 0.22);
             g.fillRect(0, 0, W, H);
+            // Frost glints, batched into 3 alpha levels (0.35..0.65).
+            var frost = [new Path2D(), new Path2D(), new Path2D()];
             for (i = 0; i < GRID_COLS * GRID_ROWS * 5; i++) {
                 var fx = srand() * W, fy = srand() * H, fr = 0.6 + srand() * 0.9;
-                fillCircle(g, fx, fy, fr, rgba(255, 255, 255, 0.35 + srand() * 0.3));
+                var fp = frost[Math.min(2, Math.floor(srand() * 3))];
+                fp.moveTo(fx + fr, fy);
+                fp.arc(fx, fy, fr, 0, TAU);
             }
+            frost.forEach(function (fp, k) { g.fillStyle = rgba(255, 255, 255, 0.4 + k * 0.1); g.fill(fp); });
         }
 
         // Terrain: ponds (merged blobs, icy in winter), lily pads, boulders.
@@ -463,6 +500,7 @@ var Renderer = (function () {
                 segLen.push(l);
                 total += l;
             }
+            var pebbles = new Path2D(), darkSpecks = new Path2D(), lightSpecks = new Path2D();
             for (i = 0; i < 520; i++) {
                 var d = rand() * total, s = 0;
                 while (s < segLen.length - 1 && d > segLen[s]) { d -= segLen[s]; s++; }
@@ -474,12 +512,17 @@ var Renderer = (function () {
                 var kind = rand();
                 if (kind < 0.08) {
                     var rx = 2.5 + rand() * 2, ry = 1.8 + rand() * 1.2, rot = rand() * 3;
-                    fillEllipse(g, x, y, rx, ry, rot, '#a49c90');
+                    pebbles.moveTo(x + Math.cos(rot) * rx, y + Math.sin(rot) * rx);
+                    pebbles.ellipse(x, y, rx, ry, rot, 0, TAU);
                 } else {
-                    var col = kind < 0.55 ? rgba(120, 80, 40, 0.45) : rgba(235, 205, 160, 0.5);
-                    fillCircle(g, x, y, 0.7 + rand() * 1.5, col);
+                    var sp = kind < 0.55 ? darkSpecks : lightSpecks, sr = 0.7 + rand() * 1.5;
+                    sp.moveTo(x + sr, y);
+                    sp.arc(x, y, sr, 0, TAU);
                 }
             }
+            g.fillStyle = '#a49c90'; g.fill(pebbles);
+            g.fillStyle = rgba(120, 80, 40, 0.45); g.fill(darkSpecks);
+            g.fillStyle = rgba(235, 205, 160, 0.5); g.fill(lightSpecks);
         });
 
         // Decorations on grass tiles (rand() order matches the C++ exactly).
@@ -1436,7 +1479,9 @@ var Renderer = (function () {
             ok = Math.hypot(x - t.x, y - t.y) <= tdef(t).levels[t.level].range * TILE;
             icon = '🎯';
         }
-        var R = 30, lift = 74;
+        // Clear the finger (~74 px) and, when zoomed in, the whole on-screen tile.
+        var R = 30, ringR = Math.max(10, view.scale * TILE * 0.55);
+        var lift = Math.max(74, ringR + R + 14);
         var bx = clamp(cx, R + 4, view.cssW - R - 4);
         var by = cy - lift;
         if (by < R + 4) by = cy + lift;   // no room above (top row): show it below the finger
@@ -1445,8 +1490,9 @@ var Renderer = (function () {
         p.globalAlpha = 1;
         // Pointer from the bubble to the tile, and a ring around the tile itself.
         pen(p, ring, 3, true);
-        line(p, bx, by + (by < cy ? R : -R), cx, cy + (by < cy ? -view.scale * TILE * 0.5 : view.scale * TILE * 0.5));
-        strokeCircle(p, cx, cy, Math.max(10, view.scale * TILE * 0.55), ring, 3);
+        var up = by < cy;
+        line(p, bx, by + (up ? R : -R), cx, cy + (up ? -ringR : ringR));
+        strokeCircle(p, cx, cy, ringR, ring, 3);
         // Bubble.
         p.shadowColor = 'rgba(0,0,0,0.3)';
         p.shadowBlur = 8;
@@ -1506,6 +1552,19 @@ var Renderer = (function () {
     }
 
     // ---------- public ----------
+    // Setting canvas.width (main.js's resize, run from a ResizeObserver) clears the canvas after
+    // this frame's draw and before paint, so a resize would show a blank board until the next
+    // frame (or for good in a throttled/headless tab). Our observer is registered after main's,
+    // so it runs right after and repaints with the last arguments.
+    var lastArgs = null, watched = null;
+    function watchResize(cv) {
+        if (watched === cv || typeof ResizeObserver === 'undefined') return;
+        watched = cv;
+        new ResizeObserver(function () {
+            if (lastArgs) { try { draw.apply(null, lastArgs); } catch (e) { /* the next frame retries */ } }
+        }).observe(cv);
+    }
+
     function draw(ctx, game, view, ui) {
         if (!ctx || !game || !game.path || !game.path.length) return;
         view = view || G().View;
@@ -1525,18 +1584,24 @@ var Renderer = (function () {
                 : (typeof performance !== 'undefined' ? performance.now() / 1000 : Date.now() / 1000);
 
         var cv = ctx.canvas;
+        lastArgs = [ctx, game, view, ui];
+        watchResize(cv);
         // Refit when the canvas's CSS size changed without a View.resize (missed resize event,
-        // phone rotation, address bar showing/hiding).
-        // Before layout (display:none / 0x0 canvas) draw nothing and cache nothing.
-        if (typeof cv.clientWidth === 'number' && cv.getBoundingClientRect && (cv.clientWidth < 2 || cv.clientHeight < 2)) return;
-        var cw = cv.clientWidth || cv.width, ch = cv.clientHeight || cv.height;
-        if (!view.cssW || (cv.clientWidth && (Math.abs(cw - view.cssW) > 0.5 || Math.abs(ch - view.cssH) > 0.5)))
-            view.resize(cw, ch, (typeof window !== 'undefined' && window.devicePixelRatio) || view.dpr || 1, game);
+        // phone rotation, address bar showing/hiding). Measured like main.js (rounded rect).
+        var cw = cv.width, ch = cv.height;
+        if (cv.getBoundingClientRect) {
+            var r = cv.getBoundingClientRect();
+            cw = Math.round(r.width); ch = Math.round(r.height);
+            // Before layout (display:none / 0x0 canvas) draw nothing and cache nothing.
+            if (cw < 2 || ch < 2) return;
+        }
+        if (!view.cssW || Math.abs(cw - view.cssW) > 0.5 || Math.abs(ch - view.cssH) > 0.5)
+            view.resize(cw, ch, Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || view.dpr || 1), game);
         view.sync(game);
         var dpr = view.dpr, bw = Math.round(view.cssW * dpr), bh = Math.round(view.cssH * dpr);
         if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
         var s = view.scale;
-        setupScale(game, s, dpr, now);
+        setupScale(game, s, dpr, now, view.fit);
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.globalAlpha = 1;
@@ -1556,7 +1621,15 @@ var Renderer = (function () {
 
         // World layers.
         ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * view.ox, dpr * view.oy);
-        ctx.drawImage(bg, 0, 0, W, H);
+        // Only the visible part of the background, with cheap (bilinear) smoothing.
+        var vx0 = Math.max(0, -view.ox / s), vy0 = Math.max(0, -view.oy / s);
+        var vx1 = Math.min(W, (view.cssW - view.ox) / s), vy1 = Math.min(H, (view.cssH - view.oy) / s);
+        if (vx1 > vx0 && vy1 > vy0) {
+            var kx = bg.width / W, ky = bg.height / H;
+            ctx.imageSmoothingQuality = 'low';
+            ctx.drawImage(bg, vx0 * kx, vy0 * ky, (vx1 - vx0) * kx, (vy1 - vy0) * ky, vx0, vy0, vx1 - vx0, vy1 - vy0);
+            ctx.imageSmoothingQuality = 'high';
+        }
         if (U.placing >= 0) drawGrid(ctx);
         if (U.placing >= 0 && U.hover) drawPreview(ctx, U);
         drawRanges(ctx, game, U);

@@ -57,6 +57,10 @@ const UI = (() => {
     toastTimer = setTimeout(() => show(t, false), TOAST_MS);
   }
   function fail(msg) { sfx('error'); toast(msg, true); }
+  // Android phones: a short buzz when a bug reaches the house (iPhone ignores it; off when muted).
+  function buzz(ms) {
+    try { if (TOUCH() && soundOn() && !st.auto && navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* */ }
+  }
 
   const OVERLAYS = ['ovIntro', 'ovMapSelect', 'ovNext', 'ovBugs', 'ovEnd', 'ovJournal'];
   function isOpen(id) { return !$(id).classList.contains('hidden'); }
@@ -229,6 +233,28 @@ const UI = (() => {
     $('tpStats').innerHTML = rows.join('');
   }
 
+  // ---------- keep the phone screen on while playing ----------
+  // Phones dim and lock during a long wave (or while watching the autopilot) because nobody touches
+  // the screen. Hold a screen wake lock while the game is running; release it when paused or on a card.
+  // (Needs https; on file:// or older browsers it silently does nothing. The browser drops the lock when
+  // the page is hidden, and we re-request it when the game runs again.)
+  let wakeLock = null, wakePending = false, wakeRetryAt = 0;
+  function syncWakeLock() {
+    const want = !paused() && !game.isOver() && (game.phase === Phase().Wave || st.auto);
+    try {
+      if (want && !wakeLock && !wakePending && performance.now() >= wakeRetryAt &&
+          navigator.wakeLock && navigator.wakeLock.request) {
+        wakePending = true;
+        navigator.wakeLock.request('screen').then((l) => {
+          wakeLock = l; wakePending = false;
+          l.addEventListener('release', () => { if (wakeLock === l) wakeLock = null; });
+        }).catch(() => { wakePending = false; wakeRetryAt = performance.now() + 5000; });   // e.g. battery saver
+      } else if (!want && wakeLock) {
+        const l = wakeLock; wakeLock = null; l.release().catch(() => {});
+      }
+    } catch (e) { wakePending = false; }
+  }
+
   // ---------- per-frame sync ----------
   function isValid(col, row) {
     if (!game.canPlace(col, row)) return false;
@@ -274,9 +300,10 @@ const UI = (() => {
       $('tpSell').disabled = over;
       const canAim = attacks(DATA.TOWERS[t.type]);
       show($('tpAim'), canAim);
-      setText($('tpAim'), t.hasFirePoint ? '🎯 Clear fire point'
-        : view.aimingId === t.id ? (TOUCH() ? '🎯 Tap a spot… ✕' : '🎯 Pick a spot… (Esc)')
-        : TOUCH() ? '🎯 Set fire point' : '🎯 Set fire point (T)');
+      // Touch labels are short: on phones this button shares a row with "✕ Cancel focus".
+      setText($('tpAim'), t.hasFirePoint ? (TOUCH() ? '🎯 Clear point' : '🎯 Clear fire point')
+        : view.aimingId === t.id ? (TOUCH() ? '🎯 Tap a spot ✕' : '🎯 Pick a spot… (Esc)')
+        : TOUCH() ? '🎯 Fire point' : '🎯 Set fire point (T)');
       $('tpAim').disabled = over;
       FocusFire.syncPanel(t, over);
     } else {
@@ -309,6 +336,7 @@ const UI = (() => {
 
     show($('btnZoomReset'), typeof View !== 'undefined' && View.isZoomed && View.isZoomed());
     syncFullButton();
+    syncWakeLock();
     st.primed = true;
   }
 
@@ -362,7 +390,7 @@ const UI = (() => {
       view.aimingId = -1;
     } else {
       view.aimingId = t.id;
-      toast(matchMedia('(pointer: coarse)').matches ? '🎯 Tap a spot inside the range circle'
+      toast(TOUCH() ? '🎯 Tap a spot inside the range circle'
         : '🎯 Click a spot inside the range circle (Esc cancels)');
     }
   }
@@ -412,7 +440,10 @@ const UI = (() => {
     const c = checkpoint();
     if (!c) return;
     sfx('click');
+    // The run keeps the difficulty it was started with (not whatever the picker shows now).
+    try { if (typeof Difficulty !== 'undefined' && Difficulty.set && c.difficulty != null) Difficulty.set(c.difficulty); } catch (e) { /* */ }
     applyDifficulty();
+    if (game.setDifficulty && c.difficulty != null) game.setDifficulty(c.difficulty);
     game.reset(c.map);
     game.lives = c.lives;
     st.mapStartLives = c.lives;
@@ -443,6 +474,8 @@ const UI = (() => {
     }
     const stars = totalStars();
     if (stars > 0) text += `\n⭐ ${stars} of ${3 * DATA.MAPS.length} stars earned`;
+    // Phones hide the side panel's hint (no room), so teach the gestures here.
+    if (TOUCH()) text += '\n\n👆 Tap a plant, then tap the garden to plant it. Double-tap a plant to select all of its kind, then tap a bug to focus fire. Pinch to zoom.';
     $('introText').textContent = text;
     const furthest = furthestMap();
     show($('btnContinue'), furthest > 0);
@@ -619,9 +652,10 @@ const UI = (() => {
   }
 
   function toggleJournal() {
-    sfx('click');
-    if (isOpen('ovJournal')) { closeCard('ovJournal'); return; }
+    if (isOpen('ovJournal')) { sfx('click'); closeCard('ovJournal'); return; }
     if (overlayOpen()) return;   // never on top of another card (as in C++)
+    sfx('click');
+    $('btnJournalClose').textContent = TOUCH() ? 'Close' : 'Close (J)';
     try {
       if (typeof Journal !== 'undefined' && Journal.render) Journal.render($('journalHost'), game);
       else $('journalHost').textContent = 'The journal is still being written…';
@@ -664,7 +698,7 @@ const UI = (() => {
     on('killed', (reward) => { st.runKills++; st.runCoins += reward; sfx('kill'); });
     on('placed', () => { st.runPlanted++; sfx('place'); });
     on('bugSound', (name) => sfx(name));
-    on('leaked', () => sfx('leak'));
+    on('leaked', () => { sfx('leak'); buzz(60); });
     on('upgraded', () => sfx('upgrade'));
     on('sold', () => sfx('sell'));
     on('gust', () => toast('🌬️ A gust of wind! Flyers are blown off course'));
@@ -697,6 +731,7 @@ const UI = (() => {
       toast(`Map ${index + 1} of ${game.totalMaps}: ${DATA.MAPS[index].name}`);    });
     on('won', () => {
       awardStars();
+      clearCheckpoint();   // right away: the end card shows 1.8 s later
       sfx('win');
       celebrate();
       setTimeout(celebrate, 900);
@@ -723,6 +758,7 @@ const UI = (() => {
     click('sideToggle', () => {
       const side = $('side');
       side.classList.toggle('collapsed');
+      $('app').classList.toggle('sideCollapsed', side.classList.contains('collapsed'));
       $('sideToggle').textContent = side.classList.contains('collapsed') ? '◂' : '▸';
       window.dispatchEvent(new Event('resize'));
     });

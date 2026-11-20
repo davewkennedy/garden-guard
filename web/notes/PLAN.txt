@@ -93,3 +93,15 @@ focusfire, ui, input, main.
   placeTower). Methods taking `const Tower &t` take the tower object.
 - QPointF becomes {x, y}. QString becomes a string. std::optional becomes null when empty.
 - Strings with emoji: copy them exactly from the C++ source.
+End-game plan (WSL clock): FEATURE FREEZE 15:30. After that, bug fixes only, each announced to Hank first.
+15:30 Bill: tools/make-sw-list.sh (final cache list), README final. Then Hank runs tools/make-dist.sh and snapshots.
+15:32-15:38 final regression on dist/gardenguard-web/:
+  Dale: browser-run pc + iphone/android --touch on maps 1, 2, 8; E2E touch flow; a 60 s autopilot at speed 3.
+  Boomhauer: keyboard/mouse 36-check suite + sound probe, one pass; portrait iPad check.
+  Bobby: visual pass: one shot per map at iphone size + PC focus/night/vine; perf numbers.
+  Bill: pwa-check.js (installable + offline) + checkpoint resume quick check.
+15:38 one-line PASS/FAIL report to Hank each. 15:41 Hank's summary to the user. Thanks, team!
+
+## UPDATED end-game times (15:13): +10 min for the usage stall
+FEATURE FREEZE 15:40 · 15:40 Bill: make-sw-list + README final -> Hank make-dist + snapshot ·
+final regression on dist 15:42-15:48 · one-line PASS/FAIL to Hank by 15:48 · summary 15:51 · DEADLINE 15:54.

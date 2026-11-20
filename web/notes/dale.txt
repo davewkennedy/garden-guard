@@ -20,4 +20,13 @@ Dale (maps/balance -> autopilot, parity, screenshots)
 - 14:45 autopilot.js: ai.fixedStep({manualNextMap}) + ai.resetCadence(): exact simtest cadence for a
   fixed 1/60 loop (1 s chunks; think at steps 0/30; phase checked at chunk boundaries; one Build chunk
   then startWave). `node tools/parity.js --fixed` proves it: identical to C++.
-- Left: rerun parity after changes; QA screenshots at the milestones.
+- 14:51 Fixed-step build: campaign speed=20 WON 20/20/20/16/16/15/13/13/11/4, 0 errors (app cadence,
+  ballpark of exact 18/18/16/14/14/12/6). speed=3 OK. --soak (new option) 3 min iphone: heap flat
+  ~1.6 MB, nodes/listeners stable, game arrays clean, fps 35-55 headless. dist/ PC + iphone --touch
+  (map 2 one tap at 30 px, map 8 zoom-first at 19.6 px) ALL OK; zip == dir (22 files), no missing refs.
+  --touch now reads Input.ZOOM_TAP_PX instead of hardcoding.
+- 15:04 tools/e2e-touch.js (touch-only 7-step flow, elementFromPoint + 32 px target checks), tools/cdp.js
+  (shared CDP helper), tools/final-qa.sh (one-shot regression: 14 runs -> QA PASS/FAIL). New sizes
+  iphone-portrait/ipad/ipad-portrait/se + --rotate yes|no. All 14 PASS on index.html.
+  Small targets reported: plant-panel buttons 26 px tall, side toggle 28 px wide.
+- Left: final-qa.sh on dist at 15:32, report by 15:38. rerun parity after changes; QA screenshots at the milestones.

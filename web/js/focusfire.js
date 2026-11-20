@@ -25,7 +25,7 @@ const FocusFire = (() => {
     view.selectedId = t.id;
     view.group = game.towers.filter((o) => o.type === t.type).map((o) => o.id);
     const def = DATA.TOWERS[t.type];
-    const coarse = matchMedia('(pointer: coarse)').matches;
+    const coarse = matchMedia('(hover: none) and (pointer: coarse)').matches;
     UI.toast(`${def.icon} ${def.name} × ${view.group.length} selected: ${coarse ? 'tap' : 'click'} a bug to focus fire`);
   }
 
@@ -106,7 +106,7 @@ const FocusFire = (() => {
         if (c > 0) total += c;
         if (o.focusId >= 0) focusing++;
       }
-      const coarse = matchMedia('(pointer: coarse)').matches;
+      const coarse = matchMedia('(hover: none) and (pointer: coarse)').matches;
       setText($('tpName'), `${def.name} × ${view.group.length}`);
       setText($('tpLevel'), focusing ? `🎯 ${focusing} focusing (Esc cancels)` : `${coarse ? 'Tap' : 'Click'} a bug to focus fire`);
       setText($('tpUpgrade'), total > 0 ? `Upgrade all · ${COIN} ${total}` : 'All at max level');

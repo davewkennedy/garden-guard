@@ -42,6 +42,17 @@ hidden while the panel is open. iPad QA at 1024x768 and 1180x820 with touch: OK.
 14:45 tools/pwa-check.js (CDP): manifest OK, Chrome reports no installability errors, SW controls the page,
 the install button shows (with and without the engagement bypass), offline reload boots. Manifest gained "id".
 iOS meta tags OK; suggested to Hank: touch-action/gesturestart so Safari can't page-zoom.
+14:53 Resume test (persistent profile, 3 launches): all pass. Found ui.js:415 (saved difficulty ignored) and
+ui.js:703 (won clears late); Hank fixed both. Platform note: Chromium rate-limits localStorage commits, so a
+SIGKILL within ~1 min of a write loses it; a clean close keeps it.
+14:56 phone.css re-tuned for Hank's grid layout (header in the side column): 844x390, 915x412 and 667x375 ×
+5 scenes all fit (CDP overflow check). SE gets a 212px column, 4 stats and a hidden level line. The intro
+card fits with every button. README.txt updated (dist, auto cache version, resume, magnifier, install
+button, full-screen icon, tablets in portrait).
+15:02 Wake lock verified via CDP (granted + denied runs). 15:13 phone plant-panel buttons are 36px (4 stats max);
+18/18 phone scenes fit.
+Freeze moved to 15:40: make-sw-list + README final, tell Hank; 15:42-15:48: pwa-check + resume against dist;
+PASS/FAIL by 15:48.
 Registration snippet for main.js (Hank adds it):
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol))
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

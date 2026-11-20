@@ -58,8 +58,8 @@ var View = (function () {
         var center = hadSize ? V.screenToWorld(V.cssW / 2, V.cssH / 2) : null;
         V.cssW = Math.max(1, cssW || 1);
         V.cssH = Math.max(1, cssH || 1);
-        // Cap at 3: crisp on every phone without huge backing stores.
-        V.dpr = clamp(dpr || 1, 1, 3);
+        // Cap at 2 (matches main.js): sharp enough on phones, ~55% less fill than 3x.
+        V.dpr = clamp(dpr || 1, 1, 2);
         var key = mapKey(game);
         if (game) { V.W = game.W; V.H = game.H; }
         if (key !== V._mapKey) { V._mapKey = key; V.zoom = 1; center = null; }

@@ -23,7 +23,7 @@
 @media (max-height: 560px) {
   /* #5 Bigger touch targets in the header and on the side toggle. */
   .iconBtn { width: 36px; height: 36px; font-size: 16px; }
-  #sideToggle { width: 28px; height: 52px; left: -18px; font-size: 14px; }
+  #sideToggle { width: 34px; height: 56px; left: -22px; font-size: 15px; }
 
   /* #1 Tower panel: compact, so Upgrade/Sell, 🎯 and Cancel focus fit at 844x390 even with 11 plants. */
   /* While a plant is selected, the shop shrinks to one line per plant (icon + price), 3 per row. */
@@ -40,19 +40,27 @@
   .tpHead { gap: 4px; }
   #tpIcon { font-size: 17px; }
   #tpName { font-size: 12px; line-height: 1.1; }
-  #tpClose { width: 26px; height: 26px; font-size: 12px; }
-  #tpLevel { font-size: 10px; margin-top: -3px; }
+  #tpClose { width: 30px; height: 26px; font-size: 12px; }
+  #sideBody:has(#towerPanel:not(.hidden)) { padding: 4px 5px; gap: 4px; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopItem { padding: 0 1px; }
+  #tpLevel { font-size: 10px; margin-top: -3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Stats in two columns: "name value" pairs. */
   #tpStats, #tpStats tbody { display: grid; grid-template-columns: 1fr 1fr; column-gap: 6px; row-gap: 0; font-size: 10px; }
   #tpStats tbody { grid-column: 1 / -1; }
-  #tpStats tr { display: flex; justify-content: space-between; gap: 3px; min-width: 0; line-height: 1.25; }
+  #tpStats tr { display: flex; justify-content: space-between; gap: 3px; min-width: 0; line-height: 1.15; }
   #tpStats tr:last-child:nth-child(odd) { grid-column: 1 / -1; }   /* odd last stat gets the full width */
+  #tpStats tr:nth-child(n+5) { display: none; }   /* phones: at most 4 stats (the journal has them all) */
   #tpStats td { padding: 0; }
   #tpStats td:first-child { color: var(--muted); white-space: nowrap; }
   #tpStats td:last-child { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #towerPanel button { font-size: 11px; padding: 3px 4px; min-height: 28px; line-height: 1.1; }
+  /* Finger-sized: 36px tall action buttons (Dale's E2E: 26px was hard to hit). */
+  #towerPanel button { font-size: 12px; padding: 2px 4px; min-height: 36px; line-height: 1.1; }
+  #towerPanel #tpClose { min-height: 0; }
+  #tpAim, #tpCancelFocus { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* 🎯 and Cancel focus side by side when both show. */
-  #tpAim:has(+ #tpCancelFocus:not(.hidden)), #tpCancelFocus { grid-column: auto; }
+  /* Two rules: a browser without :has() (Chrome < 105) would drop a combined rule entirely. */
+  #tpCancelFocus { grid-column: auto; }
+  #tpAim:has(+ #tpCancelFocus:not(.hidden)) { grid-column: auto; }
 
   /* #2 Map select: two maps per row (1|2, 3|4, ...), Back always visible at 844x390. */
   #ovMapSelect .card { width: 780px; gap: 7px; padding: 10px 14px 12px; }
@@ -63,6 +71,30 @@
   #mapList button { min-width: 58px; min-height: 34px; padding: 2px 8px; font-size: 13px; }
   #mapList button:nth-of-type(odd) { margin-right: 10px; }
 
+  /* Intro card: everything fits at 844x390 even with Resume, Continue, Choose map, Install and the
+     difficulty picker all showing. Continue / Choose map / Install share one row (flex-wrap: the other
+     children take a full row each). */
+  #ovIntro .card { flex-direction: row; flex-wrap: wrap; align-content: flex-start; gap: 6px;
+    padding: 10px 16px 12px; width: 600px; }
+  #ovIntro .card > * { flex: 0 0 100%; min-width: 0; }
+  #ovIntro .cardTitle { font-size: 18px; }
+  #ovIntro #introText { font-size: 12px; line-height: 1.3; }
+  #ovIntro .card button.big { min-height: 32px; font-size: 13px; padding: 4px 8px; }
+  #ovIntro #btnContinue { flex: 2 1 0; }
+  #ovIntro #btnChoose, #ovIntro #btnInstall { flex: 1 1 0; }
+  #ovIntro #btnContinue, #ovIntro #btnChoose, #ovIntro #btnInstall { font-size: 12px; line-height: 1.15; }
+
   /* #3 Journal: use the height the removed title freed up. */
   #journalHost { height: calc(100vh - 96px); height: calc(100dvh - 96px); min-height: 160px; }
+}
+
+/* Small phones (iPhone SE 667x375 and similar): narrower side column so the board isn't width-limited,
+   and a shorter plant panel (no level/"Focusing…" line, at most 4 stats). */
+@media (max-height: 560px) and (max-width: 740px) {
+  #app { --side-w: 212px; }
+  #tpLevel { display: none; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopIcon { font-size: 14px; }
+  #app #header .iconBtn { width: 32px; font-size: 14px; }   /* 6 icons must fit the 212px column */
+  #app #header .icons { gap: 2px; }
+  #tpAim, #tpCancelFocus { font-size: 10px !important; letter-spacing: -.3px; padding: 2px 2px !important; }
 }

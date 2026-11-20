@@ -1,0 +1,40 @@
+# Garden Guard++ web: real-phone test checklist
+
+We tested everything we could in an emulated browser (iPhone, Android and iPad sizes, touch, pinch).
+These are the things only a real phone can confirm. It takes about 10 minutes per phone.
+If anything fails, note the phone model, the browser, and what you saw.
+
+## Setup
+1. Host the files: upload the contents of `dist/gardenguard-web/` (or unzip `dist/gardenguard-web.zip`)
+   to your host. It must be **https**.
+2. Open the address on the phone.
+
+## iPhone (Safari)
+- [ ] Held upright, it says "Turn your phone sideways". Sideways, the game appears.
+- [ ] Share → Add to Home Screen → Add. The 🌻 icon appears on the home screen.
+- [ ] Open it from the icon. It runs **full screen** with no Safari bars.
+- [ ] **Sound**: tap "Let's grow!" and plant something. You should hear it. (The ringer/silent
+      switch can mute web sounds on iPhone. Try with the switch off silent if it's quiet.)
+- [ ] Leave the app (home screen), come back, tap: the sound still works.
+- [ ] Pinch to zoom in on the garden, drag to move around, then tap 🔍 to zoom back out.
+      The whole page should NOT zoom; only the garden does.
+- [ ] Pick a plant, then press and hold on the grass: a magnifier bubble shows where it will go.
+      Slide your finger and lift: it's planted there.
+- [ ] Double-tap a plant: all plants of that kind are selected. Tap a bug: they focus fire on it.
+- [ ] ▸ tab on the side panel hides/shows the panel.
+
+## Android (Chrome)
+- [ ] The full-screen button (four corners, top right) hides the browser bars and keeps it sideways.
+- [ ] The intro card shows "📲 Install as an app". Install it, then open it from the icon:
+      full screen.
+- [ ] Sound plays after the first tap.
+- [ ] Same pinch, magnifier, double-tap and ▸ checks as on the iPhone.
+
+## Both phones
+- [ ] Turn on airplane mode, then open the game from its icon: it still loads and plays (offline cache).
+- [ ] Play into map 2, then fully close the app (swipe it away). Reopen it: the intro offers
+      "▶ Resume your run" with the right map and lives.
+- [ ] On a big map (8, 9 or 10, via 🗺️ Choose map): picking a plant and tapping the garden first
+      zooms in ("tap again to plant"). Then a second tap plants it.
+- [ ] 🤖 Autopilot plays smoothly at 2× and 3× (no stutter). Phones that get warm or stutter: tell us.
+- [ ] Nothing important is cut off at the edges, including next to the notch or camera hole.

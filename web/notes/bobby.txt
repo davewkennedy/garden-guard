@@ -28,3 +28,20 @@ QA: a scratch harness in my scratchpad renders maps 0/4/6/9 at PC 1280x800 and p
   Fixed: board top-aligned with a 6 px shadow reserve (boardRect); blank-board hardening (no caching at 0x0,
   immediate bg rebuild on big size jumps). Added a touch loupe (ui.touch = finger down while placing/aiming).
   Headless shots: use --virtual-time-budget >= 6000 (blank boards at 2500 come from capture before the first rAF).
+14:49 Touch loupe verified with real dispatched touch PointerEvents (iPhone 844x390 dpr 3): placing at zoom 1 and 4,
+  top-row flip (map 10 zoom 4), aim in range (green ✓) and out of range. At zoom 4 the bubble clears the whole tile.
+  REAL BUG FIXED: zoom 4 at dpr 3 asked for a ~16 Mpx background canvas; the allocation failed and blanked the board
+  (also an iOS risk). The budget is now 6 Mpx, and buildBackground steps down on failure.
+  Remaining blank headless shots: same state, same 0 errors, but rAF only ran 5 frames in 4 s of virtual
+  time, so that's a capture-timing artifact.
+14:55 Phone perf (CDP 4x CPU throttle, iPhone dpr 3, map 10 wave 4, ~50 bugs): draw avg 6.4 / 7.0 / 7.8 ms at
+  zoom 1 / zoom 4 / pinch (pinch was 21.9 ms avg and 371 ms max; now 34 ms max with 0 background rebuilds mid-pinch).
+  Fixes: two backgrounds per map (fit + zoom; the hi one is built once while the zoom is still), sprite resolution
+  frozen while the zoom changes, glyph cache kept per resolution, visible-rect background blit, batched background
+  build. Probe: scratchpad qa/perf.js (adapted from Dale's CDP client).
+14:58 dpr capped at 2 (View + renderer fallback, matching main.js). BLANK-BOARD ROOT CAUSE: canvas.width set in
+  main's ResizeObserver clears the canvas after the frame's draw and before paint. Renderer now has its own
+  ResizeObserver (registered later, so it runs after main's) that repaints with the last args, and it measures the canvas
+  like main.js (rounded rect). Phone map shots: 6/10 blank before, 13/13 fine in two runs after.
+15:13 Final perf at dpr 2 (4x throttle, map 10 wave 4): draw avg 7.2 / 4.8 / 7.0 ms (zoom 1 / zoom 4 / pinch),
+  pinch max 37 ms (was 371). Whole headless frame 65 / 34 / 41 ms (was 106 / 66 / 80 at dpr 3).

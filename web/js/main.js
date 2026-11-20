@@ -22,7 +22,8 @@
   let lastCols = -1, lastRows = -1, lastW = 0, lastH = 0, lastDpr = 0;
   function resize(force) {
     const r = canvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    // Cap at 2x: on 3x phones that cuts fill cost ~55% (battery, smoothness) and looks nearly identical.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
     if (!force && w === lastW && h === lastH && dpr === lastDpr && game.cols === lastCols && game.rows === lastRows) return;
     const newMap = game.cols !== lastCols || game.rows !== lastRows;

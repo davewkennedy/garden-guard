@@ -1,6 +1,7 @@
 # Garden Guard++ Web — status board (owner: Hank)
 
-Start 14:29, deadline 15:44 (WSL clock).
+Start 14:29 (WSL clock). EXTENDED by 10 min for the usage-limit stall (~15:02-15:12), at the user's request:
+FEATURE FREEZE 15:40 · final regression on dist 15:42-15:48 · reports by 15:48 · summary to the user 15:51 · DEADLINE 15:54.
 
 ## Done
 - 14:32 data.js (Boomhauer) · 14:34 autopilot.js + Node parity: EXACT match with C++ on all 50 waves, Easy/Normal/Hard (Dale)
@@ -15,6 +16,28 @@ Start 14:29, deadline 15:44 (WSL clock).
 - 14:44 Boomhauer's code review of the UI port: 6 fixes applied. Bug/terrain drawing + bats/vine/wind verified vs C++.
 - 14:45 Web extras: tiny-tile auto-zoom on touch, iOS audio unlock, Android install button, fixed 1/60 s steps,
   run checkpoint ("Resume your run" after a phone closes the tab), no key hints on touch screens.
+- 14:46 Bill: installable per Chrome (no installability errors), offline boot verified; iPad 1024/1180 layouts fixed.
+  Bobby: Qt-vs-web visual parity on all 10 maps + scenes; top-aligned board; touch loupe (bubble above the finger).
+- 14:47 tools/make-dist.sh -> dist/gardenguard-web/ + dist/gardenguard-web.zip (upload copy). Snapshot web-2-phone.
+- 14:48 Boomhauer: scorpion spit/stun + caterpillar split parity EXACT vs C++; all 29 sounds fire in the browser.
+- 14:50 Bobby: fixed a real iPhone bug (zoom-4 background asked for a 64 MB canvas -> blank board); touch loupe verified.
+  Boomhauer: keyboard + mouse QA 36/36 PASS. Hank: PHONE-TEST-CHECKLIST.txt for the user's real phones.
+- 14:51 Dale: fixed-step campaign WON (lives 1-2 below exact parity, expected app cadence); 3-min soak: heap flat,
+  no DOM/listener/array growth; dist/ copy verified (22 files, touch OK).
+- 14:53 Bill: resume test OK (2 bugs fixed by Hank). Hank: phone layout with header in the right column (board ~25% bigger).
+- 14:55 Bobby: phone perf (4x CPU throttle): draw avg 6-8 ms; pinch no longer rebuilds (max 371 ms -> 34 ms). DPR capped at 2.
+  Boomhauer: iPad portrait layout (css/portrait.css).
+- 14:57 Bill: README (web-only extras, known limits); dist dress rehearsal PASS (installable, offline, resume 16/16).
+  Bobby: root cause of blank boards (resize cleared the canvas after draw) fixed; DPR cap 2 in View.
+- 15:00 Hank: touch tips on the intro card; screen wake lock while playing; Android buzz on leaks; hold/drag plants
+  on tiny tiles without the zoom step. Parity re-run: EXACT.
+- 15:02 Bill: wake lock verified (on during waves/autopilot, off when paused/on cards, 1 retry per 5 s when denied).
+- 15:02-15:10 everyone paused (usage limit); the user raised it.
+- 15:10 Browser campaign on the latest code (android size, speed 20): WON, 0 errors.
+- 15:11 Dale: touch-only E2E 7/7 PASS; iphone-portrait rotate, iPad, iPad portrait, SE all PASS.
+  Finding: phone panel buttons 26 px tall -> Bill raising to 34-36 px.
+- In progress: iPad portrait (Boomhauer, css/portrait.css), phone perf (Bobby), touch-only E2E (Dale),
+  checkpoint test + intro fit + README (Bill).
 
 ## Backlog (future sessions, not this port)
 - Power-ups (user idea via Peggy): first with in-game coins/stars, e.g. "Fertilizer: plants fire 2x for 10 s",

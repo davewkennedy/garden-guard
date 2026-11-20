@@ -120,7 +120,7 @@ button.big { font-size: 16px; font-weight: 700; min-height: 44px; }
 #rotate { display: none; position: fixed; inset: 0; z-index: 100; background: var(--bg); color: var(--green);
   flex-direction: column; align-items: center; justify-content: center; text-align: center; font-weight: 800; }
 #rotate div { font-size: 64px; }
-#rotate p { font-size: 20px; }
+#rotate p { font-size: 20px; padding: 0 28px; }
 
 /* Touch devices: show touch hints instead of keyboard hints */
 @media (hover: none) and (pointer: coarse) {
@@ -128,8 +128,8 @@ button.big { font-size: 16px; font-weight: 700; min-height: 44px; }
   #touchHint { display: block; }
   .shopKey { display: none; }
 }
-/* Phones held upright: ask to rotate */
-@media (hover: none) and (pointer: coarse) and (orientation: portrait) and (max-width: 820px) {
+/* Phones held upright: ask to rotate (tablets, 600px+ wide, can play upright) */
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) and (max-width: 600px) {
   #rotate { display: flex; }
 }
 
@@ -171,6 +171,23 @@ button.big { font-size: 16px; font-weight: 700; min-height: 44px; }
   .cardText { font-size: 13px; }
   .card button.big { min-height: 36px; font-size: 14px; }
   #side.collapsed { width: 0; border: none; }
+
+  /* Wide phones: the board is limited by height, so give it the FULL height and move the header
+     (stats + buttons) into the right-hand column above the side panel. */
+  #app { --side-w: 252px; display: grid; grid-template-columns: minmax(0, 1fr) var(--side-w); grid-template-rows: auto minmax(0, 1fr);
+    column-gap: 6px; row-gap: 4px; }
+  #app #header .iconBtn { width: 38px; height: 32px; }
+  #app #header .stat { font-size: 12px; padding: 2px 4px; }
+  #play { display: contents; }
+  #boardWrap { grid-column: 1; grid-row: 1 / 3; }
+  #header { grid-column: 2; grid-row: 1; flex-wrap: wrap; gap: 3px; justify-content: space-between; }
+  #side { grid-column: 2; grid-row: 2; }
+  .stats { flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px; }
+  .stat { text-align: center; overflow: hidden; text-overflow: ellipsis; }
+  #statMap { grid-column: 1 / -1; }
+  .icons { flex: 1 1 100%; justify-content: space-between; }
+  #app.sideCollapsed { grid-template-columns: minmax(0, 1fr) 0; column-gap: 0; }
+  #app.sideCollapsed #header { display: none; }
   #side.collapsed #sideBody, #side.collapsed #sideFoot { display: none; }
   #sideFoot { padding: 0 6px 6px; gap: 3px; }
 }

@@ -3,7 +3,7 @@
 // Serves the folder on http://127.0.0.1:<port> (python3 http.server), opens it in headless chromium and asks
 // Chrome itself: Page.getAppManifest (parse errors), Page.getInstallabilityErrors, service worker control,
 // manifest icons, offline reload, and whether the "📲 Install as an app" button (beforeinstallprompt) shows.
-//   node tools/pwa-check.js [--no-bypass]   (WSL, any folder)   exit 0 = installable, 1 = problems
+//   node tools/pwa-check.js [--no-bypass] [--root DIR]   (WSL)   exit 0 = installable, 1 = problems
 //   By default chromium skips its user-engagement heuristic so beforeinstallprompt can fire headless;
 //   --no-bypass keeps the heuristic (like a first-time visitor).
 'use strict';
@@ -14,7 +14,9 @@ if (typeof WebSocket === 'undefined') {
 }
 const { spawn, execSync } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
-const ROOT = path.join(__dirname, '..');
+// --root DIR checks another copy, e.g. --root dist/gardenguard-web (the folder you upload).
+const rootArg = process.argv.indexOf('--root');
+const ROOT = rootArg >= 0 ? path.resolve(process.argv[rootArg + 1]) : path.join(__dirname, '..');
 const PORT = 8000 + Math.floor(Math.random() * 900);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let failures = 0;

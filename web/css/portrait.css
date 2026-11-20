@@ -1,0 +1,61 @@
+/* Garden Guard++ web: tablets held upright (owner: Boomhauer). Loaded after phone.css.
+   iPad portrait (768x1024, 820x1180, ...): the board on top, the panel below it at full width (max ~40%
+   of the height). In the panel the shop is a wide grid with the plant panel / plant info beside it, and
+   the wave footer is a row at the bottom, so it is always reachable. */
+@media (orientation: portrait) and (min-width: 600px) {
+  /* Header: title + icons on the first row, the four stats on a full-width second row. */
+  #header { flex-wrap: wrap; row-gap: 8px; }
+  #title { flex: 1; }
+  .stats { order: 3; flex: 1 0 100%; justify-content: center; }
+
+  /* Board on top, panel below. Every map is about 3:2 and the board is width-limited upright, so the
+     board box takes exactly the map's shape (no empty band under the map) and the panel gets the rest. */
+  #play { flex-direction: column; gap: 12px; }
+  #boardWrap { flex: 0 1 auto; width: 100%; aspect-ratio: 3 / 2; max-height: 64%; min-height: 240px; }
+  #side { width: auto; flex: 1 1 auto; min-height: 0; }
+  #sideToggle { display: none !important; }
+  #side.collapsed #sideBody { display: grid; }   /* no collapsing upright */
+
+  /* Panel body: shop grid (left) | plant panel, plant info or hints (right). Scrolls if a long panel needs it. */
+  #sideBody { display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 34%);
+    grid-auto-rows: min-content; align-content: start; column-gap: 14px; row-gap: 8px; padding: 12px 14px 8px; }
+  #sideTitle { grid-column: 1; grid-row: 1; font-size: 16px; }
+  #shop { grid-column: 1; grid-row: 2 / span 6; align-self: start;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+  /* Right column: the plant panel or the plant info (never both: placing and selecting exclude each other). */
+  #shopInfo, #towerPanel { grid-column: 2; grid-row: 1 / span 7; }
+  /* Hints under the shop. Works without :has() (Chrome < 105 drops any rule that uses it). */
+  #hint, #touchHint { grid-column: 1; grid-row: 8; }
+  .spacer { display: none; }
+  /* Enhancement where :has() works: hints move into the empty right column. */
+  #sideBody:not(:has(#towerPanel:not(.hidden), #shopInfo:not(.hidden))) :is(#hint, #touchHint) {
+    grid-column: 2; grid-row: 1 / span 7; }
+  #sideBody:has(#towerPanel:not(.hidden)) :is(#hint, #touchHint) { display: none; }
+
+  /* Undo phone.css's "compact shop while a plant is selected" (the shop has room here). */
+  #sideBody:has(#towerPanel:not(.hidden)) .shopItem { padding: 4px 8px 5px; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopName { display: block; }
+  #sideBody:has(#towerPanel:not(.hidden)) #shop { gap: 6px; }
+
+  /* Plant panel: one stat per row (two columns truncated "2.6 tiles" in the 230 px column). */
+  #towerPanel { padding: 8px 10px 10px; gap: 5px; }
+  #tpStats { font-size: 13px; }
+  #tpStats td:first-child { color: var(--muted); }
+  #towerPanel button { min-height: 38px; }
+
+  /* Bigger shop cards: the panel has the height, and fingers need the targets. */
+  /* (Separate rules: a selector list containing :has() is dropped whole on Chrome < 105.) */
+  .shopItem { min-height: 62px; }
+  .shopIcon { font-size: 28px; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopItem { min-height: 62px; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopIcon { font-size: 28px; }
+  .shopName { font-size: 13px; }
+
+  /* Wave footer: the button and the next-wave preview side by side. */
+  #sideFoot { flex-direction: row; align-items: center; gap: 14px; padding: 4px 14px 12px; }
+  #startWave { flex: 0 0 auto; min-width: 210px; min-height: 46px; }
+  #nextWave { flex: 1; text-align: left; font-size: 13px; }
+
+  /* Cards: the journal can use the tall screen. */
+  #journalHost { height: 70vh; }
+}

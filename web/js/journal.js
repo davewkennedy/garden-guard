@@ -42,6 +42,11 @@ var Journal = (function () {
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  // Touch screens have no J key (same test as ui.js).
+  function touch() {
+    try { return matchMedia('(hover: none) and (pointer: coarse)').matches; } catch (e) { return false; }
+  }
+
   function speedWord(s) {
     return s < 0.6 ? 'very slow' : s < 1.0 ? 'slow' : s < 1.4 ? 'medium' : s < 2.0 ? 'fast' : 'very fast';
   }
@@ -115,7 +120,7 @@ var Journal = (function () {
       '<h2 class="ggj-title">📖 Garden Journal</h2>' +
       '<p class="ggj-intro">Every bug you\'ve met and every plant you\'ve grown. New pages fill in as you travel.</p>' +
       '<div class="ggj-cols">' + bugs + plants + '</div>' +
-      (onClose ? '<button type="button" class="ggj-close">Close (J)</button>' : '') +
+      (onClose ? '<button type="button" class="ggj-close">' + (touch() ? 'Close' : 'Close (J)') + '</button>' : '') +
       '</div>';
     if (onClose) {
       var btn = el.querySelector('.ggj-close');

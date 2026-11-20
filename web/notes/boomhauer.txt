@@ -32,3 +32,30 @@ Verified: Node checks for data/audio, plus a headless Chromium test page for jou
 14:43 Review of Hank's ui/focusfire/scenes/input/main vs mainwindow/focusfire/boardwidget.cpp sent (8 items; top:
   mouse clicks dropped after >10 px jitter, journal button opens over other cards, ?map=N skips startRunAt,
   non-card buttons keep focus so Enter re-clicks them). journal.js: columns now fit 2-up in the 640 px card.
+14:45 PARITY (scorpion/caterpillar): the same scripted game (10 fixed plants, 1/60 s steps) on maps 3/4/6 in Node and
+  C++ is IDENTICAL: per-wave lives, coins and kills, spit 12/20/21, split 15/29/29, hop, heal, stun ticks, max grubs,
+  and the final phase.
+14:48 SOUND TEST (headless chromium, --autoplay-policy=no-user-gesture-required, probe wrapping Sfx.play and
+  AudioBufferSourceNode.start; rAF driven by timers because virtual time starves rAF). All 29 sound names fire:
+  autopilot maps 5->7 (23 names, 1404 real buffer starts), plus a scripted map-2 run for shoot_chili, shoot_grape,
+  harvest, sell, error and lose. Scripts: scratchpad web/sndtest.sh + probe.js.
+14:50 KEYBOARD/MOUSE QA (CDP, PC 1280x800, ?map=10, real Input.dispatchKeyEvent/MouseEvent; plumbing copied from
+  Dale's browser-run.js into scratchpad web/kbtest.js): 36/36 PASS. Enter on the card primary; 1-9/0/- in shop
+  order + toggle off; click-to-plant (stays on while affordable); click select; double-click group; N wave; click bug =
+  group focus; Esc order (focus, then deselect; aim only; placing); T aim/cancel/fire point/clear; Space; F 1-2-3;
+  A on/off; J open/close, blocked under another card (also the 📖 button); Enter/Space after header clicks don't
+  re-trigger (focus stays on BODY); wheel zoom 1->4 (cap); drag pans without planting; reset; no page errors.
+14:55 css/portrait.css DONE (iPad portrait, @media (orientation: portrait) and (min-width: 600px)): header wraps (title +
+  icons, then the stats row); #play is a column; the board box is width:100% + aspect-ratio 3/2 (every map is ~3:2, so no
+  empty band; the canvas ResizeObserver sizes it), panel below fills the rest (40% at 768x1024, 45% at 820x1180). In the
+  panel: 4-column shop | plant panel / plant info / hints on the right; wave footer = button + preview row at the bottom.
+  QA script scratchpad web/portshot.js (CDP, dsf 2, touch and mouse): 768x1024 and 820x1180 x play/focus(map10)/intro/
+  mapselect/journal/plant selected on map 10: map fits the canvas, canvas crisp (px = css x dpr), wave button on
+  screen, Upgrade/🎯 visible without scrolling, header no overlap, no page errors. Shots: shots/boom-portrait-*.png.
+15:01 Touch wording: journal.js close button "Close" on touch / "Close (J)" otherwise; difficulty.js shows the chosen
+  level's tip under the pills on touch screens (tooltips can't show there). 3 small notes for Hank's files sent.
+  Final dist QA prepared: scratchpad web/final.sh (GGROOT=dist/gardenguard-web): kbtest + sound probe x2 + portrait.
+15:20 Compat audit (iOS Safari 15.4+ / Chrome 100+): JS clean everywhere (newer APIs all guarded). CSS: :has() needs
+  Chrome 105 and kills whole selector lists. portrait.css no longer depends on it (right column = plant panel OR info,
+  hints under the shop; :has only polishes) and its combined lists are split. Bill: phone.css:61 split. style.css:10
+  overscroll-behavior (Safari 16) is harmless. Portrait re-verified.

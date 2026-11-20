@@ -11,6 +11,7 @@ const Input = (() => {
   // Touch: auto-zoom when tiles are smaller than this. Bobby's loupe (shown above the finger while
   // placing, committed on lift) makes ~28 px tiles accurate enough; below that, zoom first.
   const MIN_TILE_PX = 28, TARGET_TILE_PX = 44;
+  const AIMED_MS = 350;   // a touch held at least this long (loupe visible) counts as aimed
   let canvas = null;
   const pointers = new Map();   // pointerId -> {x, y, startX, startY, t, moved, type}
   let pinch = null;             // {dist, mx, my}
@@ -41,13 +42,14 @@ const Input = (() => {
     if (t) UI.onHover(t.col, t.row); else UI.onHoverLeft();
   }
 
-  function tap(x, y, touch) {
+  function tap(x, y, touch, aimed) {
     const t = tileAt(x, y);
     if (!t) return;
-    // Big maps on phones: tiles can be ~20px. A placing/aiming tap there zooms in first,
-    // so a fat-finger tap never spends coins on the wrong tile.
+    // Big maps on phones: tiles can be ~20px. A quick placing/aiming tap there zooms in first,
+    // so a fat-finger tap never spends coins on the wrong tile. A press-and-hold or drag ("aimed")
+    // already showed the loupe over the exact tile, so that one plants on lift.
     const tilePx = DATA.TILE * (View.scale || 1);
-    if (touch && tilePx < MIN_TILE_PX && (UI.view.placing >= 0 || UI.view.aimingId >= 0)) {
+    if (touch && !aimed && tilePx < MIN_TILE_PX && (UI.view.placing >= 0 || UI.view.aimingId >= 0)) {
       View.zoomAt(x, y, TARGET_TILE_PX / tilePx);
       UI.onHover(t.col, t.row);
       UI.toast(UI.view.placing >= 0 ? '🔍 Zoomed in: tap again to plant' : '🔍 Zoomed in: tap again to aim');
@@ -90,6 +92,8 @@ const Input = (() => {
     longTimer = setTimeout(() => {
       const q = pointers.get(e.pointerId);
       if (!q || q.moved) return;
+      // Placing/aiming: holding just aims with the loupe; the lift plants. No info toast.
+      if (UI.view.placing >= 0 || UI.view.aimingId >= 0) return;
       longFired = true;
       hoverAt(q.x, q.y);
       info(q.x, q.y);
@@ -165,7 +169,8 @@ const Input = (() => {
     const mouseClick = q.type === 'mouse' && !zoomed();
     if (q.moved && !placingDrag && !mouseClick) return;
     if (longFired) { longFired = false; return; }   // long-press only shows info
-    tap(p.x, p.y, q.type !== 'mouse');
+    const aimed = q.type !== 'mouse' && (q.moved || performance.now() - q.t > AIMED_MS);
+    tap(p.x, p.y, q.type !== 'mouse', aimed);
     if (q.type !== 'mouse' && UI.view.placing < 0 && UI.view.aimingId < 0) {
       // No hover on touch: clear the preview after a tap.
       setTimeout(() => { if (UI.view.placing < 0 && UI.view.aimingId < 0) UI.onHoverLeft(); }, 0);
