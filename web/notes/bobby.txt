@@ -1,0 +1,27 @@
+Bobby (visuals): js/renderer.js (Renderer), js/view.js (View)
+
+DONE (14:41)
+- renderer.js: a full canvas port of renderer.cpp. It covers the background (grass, blades, season washes, frost, terrain
+  ponds/lilies/rocks, path + path2, specks, flowers/pebbles/tufts, season scatter, nests, house,
+  sky lanes, night wash + moon, vignette); towers (pots, aura, sparkles, aim, kick, goo stun, pips);
+  enemies (all tints, flyers, trail, eyes, vine tether, hop, HP bars) + goo spits; shots (all
+  kinds); effects (all 17 kinds + 3e wind streaks); weather; fireflies; fire points/reticles/
+  group rings/focus marks; the boss bar (screen space, bottom of the visible board); confetti.
+  Mulberry32 RNG is identical to the C++, so the garden layouts match. Boomhauer reviewed the bug/terrain parts.
+- view.js: camera. resize/sync/zoomAt/panBy/reset/screenToWorld/worldToScreen/tileAt/isZoomed/
+  boardRect. Zoom is clamped to [fit, fit*4]; the board stays centered or edge-clamped; dpr is capped at 3.
+- Readability: FX_UI = clamp(0.7/scale, 1, 2.2), so markers/plants/bugs grow on small screens
+  (phones, big maps) and fade back to 1x as you pinch in. The C++ plant/bug caps are kept. Caches
+  (glyphs/pots) are rebuilt per 0.5 device-px step; the background is rebuilt per zoom step after 0.25 s settle.
+
+API
+  Renderer.draw(ctx, game, View, ui)   ui = {hover:{col,row,valid}|null, placing, selectedId,
+                                        aimingId, group:[ids], realTime?}. Also sizes the canvas.
+  Renderer.celebrate(), Renderer.isCelebrating()
+  View.* as above (screen = CSS px relative to the canvas).
+
+QA: a scratch harness in my scratchpad renders maps 0/4/6/9 at PC 1280x800 and phone 844x390 (dpr 1 and 3), plus zoom 3.
+  No console errors.
+14:42 integrated QA in index.html: PC play/focus scenes, iPhone night scene at dpr 3, Android map 9. No JS errors
+  (only the file:// manifest CORS message). Sky lanes use the C++ board-width FX (they're in the cached bg).
+LEFT: waiting for tasks from Hank (Qt-vs-web parity, phone polish).

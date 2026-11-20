@@ -1,0 +1,148 @@
+Test 0: rose, corn and clover (Sunny Meadow)
+    reached wave 5, lives 20, kills 106
+      Thorn Rose          2 shots
+      Corn Popper       462 shots
+  [ ok ] roses and corn fire
+  [ ok ] clovers never fire
+  [ ok ] new plants kill bugs
+Test 0b: sprout shots in wave 1: alone 10, next to a clover 20
+  [ ok ] clover aura speeds up nearby plants
+Test 0c: per-map waves, bug unlocks and sky lanes
+    map  1 Sunny Meadow      15x10, 5 waves, 0 sky lanes, 0 bats
+    map  2 Apple Orchard     16x11, 5 waves, 1 sky lanes, 0 bats
+    map  3 Thorny Ridge      17x11, 5 waves, 1 sky lanes, 0 bats
+    map  4 Harvest Hollow    18x12, 5 waves, 2 sky lanes, 0 bats
+    map  5 Moonlit Garden    20x13, 5 waves, 2 sky lanes, 2 bats
+    map  6 Amber Woods       22x15, 5 waves, 2 sky lanes, 1 bats
+    map  7 Pumpkin Patch     24x16, 5 waves, 2 sky lanes, 2 bats
+    map  8 Frost Fen         25x17, 5 waves, 2 sky lanes, 1 bats
+    map  9 Snowdrift Hollow  27x18, 5 waves, 3 sky lanes, 2 bats
+    map 10 Evergreen Summit  30x20, 5 waves, 3 sky lanes, 2 bats
+  [ ok ] 10 campaign maps
+  [ ok ] grids grow 15x10 -> 30x20
+  [ ok ] paths run from x = -1 to the house at x = cols
+  [ ok ] every map has 5 waves
+  [ ok ] maps only use bugs unlocked so far
+  [ ok ] every map shows off its newly unlocked bugs
+  [ ok ] no flyers on map 1
+  [ ok ] wild bats: none on maps 1-4, 1-2 per map on maps 5-10
+  [ ok ] sky lanes 0/1/1/2/2/2/2/2/3/3, left edge to house
+  [ ok ] the finale's last wave brings at least 2 snails
+Test S: winter snow slows ground bugs
+    first winter map: walked 81.6 px in 1 s, expected 81.6
+  [ ok ] winter maps (and only they) have snow and weaker frost
+  [ ok ] snow slows ground bugs by bugSpeedMult
+Test P: two entrances (path2)
+    map 7 Pumpkin Patch: 15 ground bugs on the main path, 15 on the second
+  [ ok ] ground bugs use both entrances
+Test U: plant unlocks per map
+  [ ok ] locked plants can't be placed; unlocked ones can
+  [ ok ] each map's new plants exist, unlock there, and have card text
+  [ ok ] reset(0) relocks; reset(N) unlocks up to map N
+Test 1: new plants only (Sunny Meadow)
+    reached wave 5, lives 20, kills 106, harvest 450
+      Spore Mushroom     19 shots
+      Chili Pepper      200 shots
+  [ ok ] mushrooms and chilis fire
+  [ ok ] sunflowers never fire
+  [ ok ] two max sunflowers pay 45 each per cleared wave
+Test 2: full campaign
+    map 1 Sunny Meadow   -> cleared, lives 20
+  [ ok ] can't start a wave between maps
+  [ ok ] nextMap() moves on
+  [ ok ] new map starts at wave 0
+  [ ok ] plants and coins reset
+  [ ok ] lives carry over
+    map 2 Apple Orchard  -> cleared, lives 20
+  [ ok ] can't start a wave between maps
+  [ ok ] nextMap() moves on
+  [ ok ] new map starts at wave 0
+  [ ok ] plants and coins reset
+  [ ok ] lives carry over
+    map 3 Thorny Ridge   -> cleared, lives 20
+  [ ok ] can't start a wave between maps
+  [ ok ] nextMap() moves on
+  [ ok ] new map starts at wave 0
+  [ ok ] plants and coins reset
+  [ ok ] lives carry over
+    map 4 Harvest Hollow -> cleared, lives 20
+  [ ok ] can't start a wave between maps
+  [ ok ] nextMap() moves on
+  [ ok ] new map starts at wave 0
+  [ ok ] plants and coins reset
+  [ ok ] lives carry over
+    map 5 Moonlit Garden -> cleared, lives 20
+  [ ok ] can't start a wave between maps
+  [ ok ] nextMap() moves on
+  [ ok ] new map starts at wave 0
+  [ ok ] plants and coins reset
+  [ ok ] lives carry over
+    map 6 Amber Woods    -> cleared, lives 20
+  [ ok ] can't start a wave between maps
+  [ ok ] nextMap() moves on
+  [ ok ] new map starts at wave 0
+  [ ok ] plants and coins reset
+  [ ok ] lives carry over
+    map 7 Pumpkin Patch  -> cleared, lives 20
+  [ ok ] can't start a wave between maps
+  [ ok ] nextMap() moves on
+  [ ok ] new map starts at wave 0
+  [ ok ] plants and coins reset
+  [ ok ] lives carry over
+    map 8 Frost Fen      -> cleared, lives 20
+  [ ok ] can't start a wave between maps
+  [ ok ] nextMap() moves on
+  [ ok ] new map starts at wave 0
+  [ ok ] plants and coins reset
+  [ ok ] lives carry over
+    map 9 Snowdrift Hollow -> cleared, lives 20
+  [ ok ] can't start a wave between maps
+  [ ok ] nextMap() moves on
+  [ ok ] new map starts at wave 0
+  [ ok ] plants and coins reset
+  [ ok ] lives carry over
+    map 10 Evergreen Summit -> WON, lives 20
+      Pea Sprout        116 shots
+      Frost Fern        157 shots
+      Pumpkin Mortar    732 shots
+      Cactus Sniper     423 shots
+      Spore Mushroom    283 shots
+      Chili Pepper     1152 shots
+      Thorn Rose        286 shots
+      Corn Popper      1012 shots
+  [ ok ] campaign won
+  [ ok ] mapCleared/mapStarted signals
+  [ ok ] no map after the last one
+  [ ok ] reset() returns to map 1 with full lives
+Test 3: autopilot campaign (normal coins)
+    map 1 Sunny Meadow   -> cleared at wave 5, lives 20, plants 10
+    map 2 Apple Orchard  -> cleared at wave 5, lives 20, plants 12
+    map 3 Thorny Ridge   -> cleared at wave 5, lives 20, plants 10
+    map 4 Harvest Hollow -> cleared at wave 5, lives 18, plants 10
+    map 5 Moonlit Garden -> cleared at wave 5, lives 18, plants 10
+    map 6 Amber Woods    -> cleared at wave 5, lives 16, plants 12
+    map 7 Pumpkin Patch  -> cleared at wave 5, lives 14, plants 13
+    map 8 Frost Fen      -> cleared at wave 5, lives 14, plants 15
+    map 9 Snowdrift Hollow -> cleared at wave 5, lives 12, plants 19
+    map 10 Evergreen Summit -> WON at wave 5, lives 6, plants 19
+  [ ok ] autopilot wins the whole campaign with normal coins
+    autopilot result: won the campaign
+Test D: difficulty modes
+    Easy   lives 20/20/20/20/20/20/20/20/18/18 -> WON
+    Normal lives 20/20/20/18/18/16/14/14/12/6 -> WON
+    Hard   lives 19/19/12/4/4/0 -> LOST on map 6 wave 4
+  [ ok ] setDifficulty re-applies start coins
+  [ ok ] Normal is still won by the autopilot
+  [ ok ] Easy ends with at least Normal's lives
+  [ ok ] Hard ends worse than Normal (fewer lives, or a loss no earlier than map 5)
+Test F: focus fire
+  [ ok ] placed 3 sprouts next to the path
+  [ ok ] bugs spawned
+  [ ok ] focusFire accepted
+  [ ok ] every selected plant focuses the bug
+  [ ok ] no ambush bonus while focusing
+  [ ok ] focused bug is gone
+  [ ok ] plants revert when the bug is gone
+  [ ok ] the ambusher returns to its fire point (bonus restored)
+  [ ok ] enemyNear finds nothing far away
+PASS

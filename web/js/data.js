@@ -1,0 +1,332 @@
+// Garden Guard++ web: game balance and map data. Faithful port of src/data.h (owner: Boomhauer).
+// No DOM. Defines the global DATA; in Node: module.exports = DATA.
+// Enums: EnemyType = numbers (index into ENEMIES); Projectile / Facing / Season = string constants.
+// Every TowerLevel / EnemyDef / MapDef object has ALL the C++ fields, with the C++ defaults filled in.
+var DATA = (function () {
+  'use strict';
+
+  // Tiles are always 64 logical px. Each map has its own grid size (MapDef cols/rows).
+  var TILE = 64;
+  var DEFAULT_COLS = 15;
+  var DEFAULT_ROWS = 10;
+
+  var SELL_RATE = 0.7;          // refund = floor(spent * SELL_RATE)
+  var WAVE_BONUS_BASE = 20;     // coins on clearing wave n: BASE + PER * n
+  var WAVE_BONUS_PER = 5;
+  var MORTAR_FLIGHT = 0.7;      // seconds a mortar shell is in the air
+  var FLAME_HALF_ANGLE = 0.6;   // radians (~34 deg) each side of the chili's aim
+  var START_LIVES = 20;         // lives carry over from map to map
+
+  function strEnum(names) {
+    var o = {};
+    names.forEach(function (n) { o[n] = n; });
+    return Object.freeze(o);
+  }
+
+  // How a plant attacks.
+  var Projectile = strEnum(['Bolt', 'Frost', 'Mortar', 'Spike', 'Spore', 'Flame', 'Thorn', 'Kernel',
+                            'Aura', 'None', 'Vine']);
+  // Which way each bug emoji faces as drawn.
+  var Facing = strEnum(['Left', 'Right', 'Up']);
+  var Season = strEnum(['Spring', 'Summer', 'Autumn', 'Winter']);
+
+  var ENEMY_NAMES = ['Ant', 'Beetle', 'Wasp', 'Snail', 'Caterpillar', 'Grub', 'Cricket', 'Mosquito',
+                     'GoldenBeetle', 'Butterfly', 'Bat', 'Scorpion'];
+  var EnemyType = {};
+  ENEMY_NAMES.forEach(function (n, i) { EnemyType[n] = i; });
+  Object.freeze(EnemyType);
+  var Ant = 0, Beetle = 1, Wasp = 2, Snail = 3, Caterpillar = 4, Grub = 5, Cricket = 6, Mosquito = 7,
+      GoldenBeetle = 8, Butterfly = 9, Bat = 10, Scorpion = 11;
+
+  // MapDef terrain kinds.
+  var TERRAIN_ROCK = 0;   // boulder: not plantable
+  var TERRAIN_WATER = 1;  // pond (icy on winter maps): not plantable
+  var TERRAIN_LILY = 2;   // lily pad on the pond: plantable
+
+  // ---- Towers ----
+  // Units: range/splash in tiles, rate in shots/second, poisonDps in hp/second.
+  // levels[0].cost = price to plant; levels[n].cost = price to upgrade to level n.
+  var LEVEL_DEFAULTS = { cost: 0, damage: 0, range: 0, rate: 0, slow: 0, slowTime: 0, splash: 0,
+    poisonDps: 0, poisonTime: 0, income: 0, pierce: 0, shots: 0, boost: 0, groundTime: 0 };
+  function lv(o) { return Object.assign({}, LEVEL_DEFAULTS, o); }
+  // TowerDef: id, name, icon, projectile, projectileSpeed, desc, color, levels, unlockMap = 0, counters = ''
+  function tower(id, name, icon, projectile, projectileSpeed, desc, color, levels, unlockMap, counters) {
+    return { id: id, name: name, icon: icon, projectile: projectile, projectileSpeed: projectileSpeed,
+      desc: desc, color: color, levels: levels.map(lv), unlockMap: unlockMap || 0, counters: counters || '' };
+  }
+
+  // Shop order (keys 1-9, 0, -).
+  var TOWERS = [
+    tower('sprout', 'Pea Sprout', '🌱', Projectile.Bolt, 9,
+      'Fast single shots.', '#5cb85c',
+      [{ cost: 50, damage: 12, range: 2.6, rate: 1.6 },
+       { cost: 60, damage: 20, range: 2.9, rate: 1.9 },
+       { cost: 100, damage: 34, range: 3.2, rate: 2.3 }]),
+    tower('frost', 'Frost Fern', '🌿', Projectile.Frost, 8,
+      'Chills bugs to slow them.', '#5bc0de',
+      [{ cost: 70, damage: 4, range: 2.3, rate: 1.2, slow: 0.4, slowTime: 1.5 },
+       { cost: 70, damage: 7, range: 2.6, rate: 1.4, slow: 0.5, slowTime: 1.8 },
+       { cost: 110, damage: 12, range: 2.9, rate: 1.6, slow: 0.6, slowTime: 2.2 }]),
+    tower('mortar', 'Pumpkin Mortar', '🎃', Projectile.Mortar, 0,
+      'Lobs shells that splash groups.', '#f0883e',
+      [{ cost: 100, damage: 30, range: 3.2, rate: 0.6, splash: 0.9 },
+       { cost: 100, damage: 50, range: 3.5, rate: 0.7, splash: 1.0 },
+       { cost: 160, damage: 85, range: 3.8, rate: 0.8, splash: 1.2 }]),
+    tower('cactus', 'Cactus Sniper', '🌵', Projectile.Spike, 20,
+      'Long range: picks off scorpions before they can spit (+50% damage to them).', '#3d8b3d',
+      [{ cost: 125, damage: 70, range: 5.0, rate: 0.5 },
+       { cost: 120, damage: 120, range: 5.5, rate: 0.55 },
+       { cost: 180, damage: 200, range: 6.0, rate: 0.6 }],
+      2, 'snipes 🦂 scorpions from beyond their goo range'),
+    tower('mushroom', 'Spore Mushroom', '🍄', Projectile.Spore, 6,
+      'Poisons bugs. Ignores armor.', '#b06ad9',
+      [{ cost: 90, damage: 4, range: 2.6, rate: 0.9, poisonDps: 9, poisonTime: 3 },
+       { cost: 90, damage: 6, range: 2.8, rate: 1.0, poisonDps: 16, poisonTime: 3.5 },
+       { cost: 140, damage: 10, range: 3.0, rate: 1.1, poisonDps: 28, poisonTime: 4 }],
+      2, 'poison melts the armored 🐌 snail boss'),
+    tower('chili', 'Chili Pepper', '🌶️', Projectile.Flame, 0,
+      'Burns every bug in a cone.', '#e5402b',
+      [{ cost: 110, damage: 14, range: 1.7, rate: 1.2 },
+       { cost: 110, damage: 22, range: 1.9, rate: 1.3 },
+       { cost: 170, damage: 36, range: 2.1, rate: 1.5 }],
+      3, 'torches the 🦟 mosquito-healed swarm all at once'),
+    tower('sunflower', 'Sunflower', '🌻', Projectile.None, 0,
+      'Earns coins every wave.', '#f2b705',
+      [{ cost: 75, income: 15 },
+       { cost: 80, income: 28 },
+       { cost: 120, income: 45 }]),
+    tower('rose', 'Thorn Rose', '🌹', Projectile.Thorn, 11,
+      'Thorns pierce a line of bugs.', '#d6336c',
+      [{ cost: 95, damage: 16, range: 3.0, rate: 0.9, pierce: 3 },
+       { cost: 95, damage: 26, range: 3.3, rate: 1.0, pierce: 4 },
+       { cost: 150, damage: 42, range: 3.6, rate: 1.1, pierce: 6 }],
+      3, 'thorns skewer 🦇 bats and the bugs behind them'),
+    tower('corn', 'Corn Popper', '🌽', Projectile.Kernel, 10,
+      'Pops kernels at several bugs.', '#f5c518',
+      [{ cost: 85, damage: 9, range: 2.5, rate: 0.9, shots: 3 },
+       { cost: 90, damage: 14, range: 2.7, rate: 1.0, shots: 4 },
+       { cost: 140, damage: 22, range: 2.9, rate: 1.1, shots: 5 }],
+      1, 'pops a whole brood of 🐛 grubs at once'),
+    tower('clover', 'Lucky Clover', '🍀', Projectile.Aura, 0,
+      'Nearby plants fire faster.', '#2fb36b',
+      [{ cost: 100, range: 1.6, boost: 0.2 },
+       { cost: 100, range: 1.8, boost: 0.3 },
+       { cost: 150, range: 2.1, boost: 0.45 }],
+      3, 'speeds up your plants to catch the ✨🐞 golden beetle'),
+    tower('grape', 'Grape Vine', '🍇', Projectile.Vine, 0,
+      'Lassos flyers and pulls them down so every plant can hit them.', '#7b3fa0',
+      [{ cost: 90, damage: 6, range: 2.5, rate: 0.33, groundTime: 2.5 },
+       { cost: 90, damage: 9, range: 2.6, rate: 0.36, groundTime: 3.0 },
+       { cost: 130, damage: 14, range: 2.8, rate: 0.4, groundTime: 3.5 }],
+      1, 'pulls 🦋 flyers down where mortars and chilis can reach them'),
+  ];
+
+  // ---- Enemies ----
+  // speed in tiles/second; armor = flat damage reduction (min 1 damage);
+  // slowResist 0..1 reduces frost slow; lives = lives lost if it reaches the house.
+  var ENEMY_FIELDS = ['name', 'icon', 'hp', 'speed', 'reward', 'lives', 'armor', 'slowResist', 'boss',
+    'facing', 'scale', 'splitInto', 'splitCount', 'hopEvery', 'hopDist', 'healEvery', 'healRadius',
+    'healPct', 'golden', 'flying', 'desc', 'spitEvery', 'spitRange', 'stunTime', 'wild'];
+  var ENEMY_DEFAULTS = { scale: 1.0, splitInto: -1, splitCount: 0, hopEvery: 0, hopDist: 0, healEvery: 0,
+    healRadius: 0, healPct: 0, golden: false, flying: false, desc: '', spitEvery: 0, spitRange: 0,
+    stunTime: 0, wild: false };
+  function enemyDef(a) {
+    var o = Object.assign({}, ENEMY_DEFAULTS);
+    a.forEach(function (v, i) { o[ENEMY_FIELDS[i]] = v; });
+    return o;
+  }
+  var ENEMIES = [
+      ["Ant", "🐜", 32, 1.5, 5, 1, 0, 0, false, 'Left',
+       1.0, -1, 0, 0, 0, 0, 0, 0, false, false, "Quick little marcher. Comes in crowds."],
+      ["Beetle", "🐞", 130, 0.9, 11, 1, 3, 0, false, 'Up',
+       1.0, -1, 0, 0, 0, 0, 0, 0, false, false, "Armored shell shrugs off weak hits. Poison ignores it."],
+      ["Wasp", "🐝", 45, 2.4, 7, 1, 0, 0.2, false, 'Left',
+       1.0, -1, 0, 0, 0, 0, 0, 0, false, false, "Very fast. Hard to chill."],
+      ["Snail", "🐌", 1500, 0.45, 120, 5, 6, 0.5, true, 'Right',
+       1.0, -1, 0, 0, 0, 0, 0, 0, false, false, "Boss! Slow, heavily armored, costs 5 lives."],
+      ["Caterpillar", "🐛", 160, 0.75, 8, 1, 1, 0, false, 'Left',
+       1.25, Grub, 3, 0, 0, 0, 0, 0, false, false, "Bursts into 3 fast grubs when squashed."],
+      ["Grub", "🐛", 22, 1.9, 2, 1, 0, 0, false, 'Left',
+       0.6, -1, 0, 0, 0, 0, 0, 0, false, false, "Baby caterpillar. Tiny and quick."],
+      ["Cricket", "🦗", 70, 1.1, 8, 1, 0, 0.3, false, 'Left',
+       1.0, -1, 0, 2.5, 1.6, 0, 0, 0, false, false, "Leaps ahead every few seconds, skipping your defenses."],
+      ["Mosquito", "🦟", 55, 1.6, 10, 1, 0, 0.1, false, 'Left',
+       1.0, -1, 0, 0, 0, 2.0, 1.6, 0.12, false, false, "Heals nearby bugs. Swat it first!"],
+      ["Golden Beetle", "🐞", 90, 2.6, 60, 0, 2, 0.6, false, 'Up',
+       1.1, -1, 0, 0, 0, 0, 0, 0, true, false, "Rare and speedy. Catch it for a 60-coin jackpot!"],
+      ["Butterfly", "🦋", 40, 1.7, 6, 1, 0, 0, false, 'Up',
+       1.0, -1, 0, 0, 0, 0, 0, 0, false, true, "Flies over the path. Mortars and chilies can't reach it."],
+      ["Bat", "🦇", 150, 1.3, 30, 1, 1, 0.2, false, 'Up',
+       1.0, -1, 0, 0, 0, 0, 0, 0, false, true,
+       "Wild flyer: zig-zags its own route to your house. Catch it for 30 coins!", 0, 0, 0, true],
+      ["Scorpion", "🦂", 180, 0.8, 14, 1, 2, 0, false, 'Left',
+       1.1, -1, 0, 0, 0, 0, 0, 0, false, false, "Spits goo that stuns the nearest plant for 3 s.",
+       4.0, 2.2, 3.0],].map(enemyDef);
+
+  // ---- Waves ----
+  // Each group: count enemies of a type, first at `delay` s after the wave starts, then every `gap` s.
+  function wave(a) {
+    return { hpMult: a[0], groups: a[1].map(function (g) {
+      return { enemy: g[0], count: g[1], gap: g[2], delay: g[3] };
+    }) };
+  }
+  var WAVES = [
+      [1.00, [[Ant, 10, 0.9, 0]]],
+      [1.20, [[Ant, 16, 0.7, 0]]],
+      [1.40, [[Ant, 10, 0.8, 0], [Beetle, 4, 2.0, 4]]],
+      [1.65, [[Wasp, 12, 0.5, 0], [Ant, 6, 0.8, 5], [Caterpillar, 2, 3.0, 8]]],
+      [1.90, [[Beetle, 7, 1.4, 0], [Ant, 10, 0.6, 2], [Cricket, 4, 1.8, 6]]],
+      [2.20, [[Wasp, 18, 0.35, 0], [Cricket, 4, 1.5, 4], [GoldenBeetle, 1, 1, 8]]],
+      [2.50, [[Beetle, 10, 1.1, 0], [Ant, 12, 0.5, 3], [Mosquito, 2, 4.0, 6], [Wasp, 8, 0.45, 9],
+              [Caterpillar, 2, 3.0, 12]]],
+      [2.85, [[Ant, 14, 0.45, 0], [Cricket, 4, 1.2, 2], [Snail, 1, 1, 6], [Mosquito, 1, 1, 7]]],
+      [3.25, [[Beetle, 13, 0.9, 0], [Wasp, 18, 0.35, 4], [Mosquito, 2, 4.0, 6], [Caterpillar, 4, 2.0, 10]]],
+      [3.70, [[Ant, 18, 0.35, 0], [Beetle, 14, 0.8, 2], [Cricket, 4, 1.2, 4], [Wasp, 22, 0.3, 8],
+              [Snail, 2, 6, 10], [Mosquito, 2, 5.0, 12], [Caterpillar, 3, 2.0, 16], [GoldenBeetle, 1, 1, 18]]],].map(wave);
+
+  // ---- Maps ----
+  // path / path2: tile waypoints {col,row} as [c, r] arrays joined by straight lines.
+  // skyLanes: array of lanes; a lane is an array of [x, y] tile points (diagonals allowed).
+  // terrain: [col, row, kind] (TERRAIN_*).
+  var MAP_FIELDS = ['name', 'blurb', 'path', 'hpMult', 'startCoins', 'grassA', 'grassB', 'seed', 'night',
+    'skyLanes', 'waves', 'cols', 'rows', 'season', 'terrain', 'bugSpeedMult', 'frostMult', 'path2',
+    'windEvery'];
+  var MAP_DEFAULTS = { night: false, skyLanes: [], waves: [], cols: DEFAULT_COLS, rows: DEFAULT_ROWS,
+    season: Season.Spring, terrain: [], bugSpeedMult: 1.0, frostMult: 1.0, path2: [], windEvery: 0 };
+  function mapDef(a) {
+    var o = Object.assign({}, MAP_DEFAULTS);
+    a.forEach(function (v, i) { o[MAP_FIELDS[i]] = v; });
+    o.waves = o.waves.map(wave);
+    return o;
+  }
+  var MAPS = [
+      ["Sunny Meadow", "A gentle meadow to get your garden growing.",
+       [[-1, 1], [2, 1], [2, 6], [6, 6], [6, 2], [10, 2], [10, 8], [13, 8], [13, 4], [15, 4]],
+       1.0, 180, "#79c25a", "#73bb54", 20261118, false,
+       [],
+       [
+        [1.00, [[Ant, 10, 0.9, 0]]],
+        [1.20, [[Ant, 14, 0.7, 0], [Beetle, 2, 2.5, 6]]],
+        [1.40, [[Wasp, 10, 0.5, 0], [Ant, 8, 0.7, 5]]],
+        [1.70, [[Beetle, 6, 1.4, 0], [Ant, 10, 0.6, 2], [Wasp, 6, 0.5, 8]]],
+        [2.00, [[Ant, 20, 0.3, 0], [Wasp, 14, 0.35, 3], [Beetle, 6, 1, 6]]]],
+       15, 10, 'Spring'],
+      ["Apple Orchard", "Butterflies flutter along the sky lane, out of reach of mortars and chilis. Caterpillars split when squashed!",
+       [[-1, 9], [3, 9], [3, 1], [7, 1], [7, 8], [12, 8], [12, 2], [16, 2]],
+       1.0, 360, "#8cc35a", "#86bc52", 7051, false,
+       [[[-1, 10], [5, 10], [10, 4.5], [16, 2]]],
+       [
+        [0.76, [[Ant, 12, 0.7, 0], [Caterpillar, 2, 3, 5]]],
+        [0.95, [[Butterfly, 8, 0.8, 0], [Ant, 10, 0.6, 4]]],
+        [1.13, [[Beetle, 6, 1.4, 0], [Caterpillar, 4, 2, 3], [Butterfly, 6, 0.7, 8]]],
+        [1.32, [[Wasp, 14, 0.4, 0], [Butterfly, 10, 0.6, 4], [Caterpillar, 3, 2.5, 8]]],
+        [1.51, [[Ant, 16, 0.4, 0], [Beetle, 8, 1, 2], [Butterfly, 14, 0.5, 6], [Caterpillar, 4, 2, 10]]]],
+       16, 11, 'Spring'],
+      ["Thorny Ridge", "Crickets leap ahead and scorpions spit goo that stuns plants: don't crowd the path. A snail guards the ridge.",
+       [[-1, 4], [1, 4], [1, 1], [4, 1], [4, 9], [9, 9], [9, 3], [12, 3], [12, 6], [17, 6]],
+       1.0, 420, "#6aae55", "#64a74f", 4242, false,
+       [[[-1, 0], [7, 0.5], [11, 5.5], [17, 6]]],
+       [
+        [0.80, [[Cricket, 6, 1.2, 0], [Ant, 12, 0.6, 3]]],
+        [0.97, [[Scorpion, 3, 3, 0], [Beetle, 6, 1.3, 2], [Butterfly, 6, 0.8, 6]]],
+        [1.14, [[Cricket, 8, 1, 0], [Wasp, 12, 0.4, 4], [Caterpillar, 3, 2.5, 8]]],
+        [1.37, [[Scorpion, 5, 2.5, 0], [Butterfly, 10, 0.6, 3], [Cricket, 6, 1, 8]]],
+        [1.60, [[Ant, 18, 0.4, 0], [Beetle, 10, 0.9, 2], [Snail, 1, 1, 6], [Scorpion, 3, 3, 9], [Butterfly, 10, 0.6, 10]]]],
+       17, 11, 'Summer',
+       [[6, 1, 0], [7, 6, 0], [14, 9, 0], [2, 7, 0], [12, 1, 0], [15, 3, 0]]],
+      ["Harvest Hollow", "Golden late-summer fields. Mosquitoes heal the swarm, so take them out first. Watch for a golden glint!",
+       [[-1, 7], [3, 7], [3, 2], [7, 2], [7, 9], [11, 9], [11, 1], [15, 1], [15, 6], [18, 6]],
+       1.0, 500, "#b5b04c", "#ada846", 1031, false,
+       [[[-1, 0], [9, 0.3], [13, 3.5], [18, 6]], [[-1, 11], [6, 10.5], [13, 7], [18, 6]]],
+       [
+        [0.99, [[Ant, 16, 0.4, 0], [Butterfly, 8, 0.6, 3], [Cricket, 6, 1, 6]]],
+        [1.20, [[Beetle, 10, 1, 0], [Scorpion, 3, 3, 4], [Mosquito, 2, 4, 6]]],
+        [1.40, [[Caterpillar, 6, 1.6, 0], [Mosquito, 3, 3.5, 4], [Wasp, 14, 0.35, 6], [GoldenBeetle, 1, 1, 10]]],
+        [1.51, [[Cricket, 10, 0.8, 0], [Butterfly, 10, 0.6, 3], [Scorpion, 3, 2.5, 6]]],
+        [1.61, [[Ant, 20, 0.35, 0], [Beetle, 12, 0.8, 2], [Mosquito, 2, 4, 6], [Snail, 1, 1, 8], [Caterpillar, 3, 2, 12], [Butterfly, 8, 0.6, 14]]]],
+       18, 12, 'Summer',
+       [[13, 8, 1], [14, 8, 1], [13, 9, 1], [14, 9, 1], [13, 10, 1], [14, 10, 1], [12, 10, 1], [12, 8, 2], [12, 9, 2]]],
+      ["Moonlit Garden", "Night falls. Fireflies light the way, and a wild bat flaps unpredictably across the garden. Tip: a Frost Fern where a lane crosses the path slows bugs on the ground and in the air.",
+       [[-1, 1], [15, 1], [15, 5], [2, 5], [2, 10], [20, 10]],
+       1.0, 500, "#2f5f42", "#2b583d", 9001, true,
+       [[[-1, 3], [10, 3], [17, 7.5], [20, 10]], [[-1, 7.5], [11, 7.5], [20, 10]]],
+       [
+        [0.92, [[Butterfly, 8, 0.7, 0], [Ant, 14, 0.5, 2]]],
+        [1.09, [[Mosquito, 2, 4, 0], [Beetle, 8, 1.2, 0], [Butterfly, 8, 0.6, 5]]],
+        [1.32, [[Bat, 1, 1, 4], [Cricket, 8, 1, 0], [Butterfly, 6, 0.6, 3], [GoldenBeetle, 1, 1, 9]]],
+        [1.55, [[Scorpion, 4, 2.5, 0], [Mosquito, 2, 3.5, 3], [Butterfly, 8, 0.6, 6], [Caterpillar, 3, 2, 8]]],
+        [1.78, [[Beetle, 10, 0.8, 0], [Bat, 1, 1, 6], [Mosquito, 2, 4, 5], [Wasp, 12, 0.35, 8], [Snail, 1, 1, 10]]]],
+       20, 13, 'Summer',
+       [[6, 7, 1], [7, 7, 2], [8, 7, 1], [9, 7, 1], [6, 8, 1], [7, 8, 1], [8, 8, 2], [9, 8, 1]]],
+      ["Amber Woods", "Autumn leaves and long switchbacks. The swarms are bigger now, a wild bat may swoop through, and gusts of wind blow flyers off course.",
+       [[-1, 2], [4, 2], [4, 12], [9, 12], [9, 2], [14, 2], [14, 12], [19, 12], [19, 7], [22, 7]],
+       1.0, 600, "#c99a45", "#c1923f", 6161, false,
+       [[[-1, 14], [7, 14], [12, 7], [22, 7]], [[-1, 0], [11, 0], [17, 5], [22, 7]]],
+       [
+        [1.03, [[Ant, 20, 0.36, 0], [Butterfly, 8, 0.54, 3], [Cricket, 5, 0.89, 6]]],
+        [1.22, [[Beetle, 10, 0.89, 0], [Scorpion, 2, 2.68, 4], [Caterpillar, 4, 1.79, 6]]],
+        [1.40, [[Wasp, 18, 0.31, 0], [Mosquito, 2, 3.13, 4], [Butterfly, 10, 0.54, 6], [GoldenBeetle, 1, 1, 10]]],
+        [1.75, [[Cricket, 13, 0.72, 0], [Scorpion, 5, 2.24, 4], [Caterpillar, 5, 1.79, 6], [Butterfly, 13, 0.45, 10]]],
+        [1.95, [[Ant, 29, 0.31, 0], [Beetle, 16, 0.72, 2], [Mosquito, 3, 3.58, 6], [Snail, 1, 6, 8], [Caterpillar, 5, 1.79, 12], [Butterfly, 13, 0.45, 14], [Bat, 1, 1, 16]]]],
+       22, 15, 'Autumn',
+       [[7, 6, 0], [11, 8, 0], [17, 4, 0], [2, 9, 0], [20, 13, 0]], 1.0, 1.0, [], 12.0],
+      ["Pumpkin Patch", "Crossroads! Bugs come from two entrances, the left edge and the top, and their paths cross three times. Plants at a crossing hit both streams. Watch the windy gusts.",
+       [[-1, 13], [5, 13], [5, 3], [11, 3], [11, 12], [17, 12], [17, 3], [21, 3], [21, 9], [24, 9]],
+       1.0, 660, "#b98a3e", "#b08238", 3110, false,
+       [[[-1, 0], [8, 0.5], [14, 7.5], [24, 9]], [[-1, 15], [14, 15], [19, 11], [24, 9]]],
+       [
+        [1.15, [[Ant, 24, 0.33, 0], [Butterfly, 9, 0.49, 3], [Cricket, 6, 0.82, 6]]],
+        [1.34, [[Beetle, 12, 0.82, 0], [Scorpion, 3, 2.45, 4], [Caterpillar, 4, 1.63, 6]]],
+        [1.54, [[Wasp, 21, 0.29, 0], [Mosquito, 3, 2.86, 4], [Butterfly, 12, 0.49, 6], [GoldenBeetle, 1, 1, 10]]],
+        [1.90, [[Cricket, 16, 0.65, 0], [Scorpion, 5, 2.04, 4], [Caterpillar, 5, 1.63, 6], [Butterfly, 16, 0.41, 10], [Bat, 1, 1, 8]]],
+        [2.11, [[Ant, 35, 0.29, 0], [Beetle, 20, 0.65, 2], [Mosquito, 4, 3.27, 6], [Snail, 1, 6, 8], [Caterpillar, 5, 1.63, 12], [Butterfly, 16, 0.41, 14], [Bat, 1, 1, 16]]]],
+       24, 16, 'Autumn',
+       [], 1.0, 1.0, [[8, -1], [8, 9], [14, 9], [14, 14], [19, 14], [19, 9], [24, 9]], 12.0],
+      ["Frost Fen", "Winter arrives. Deep snow slows the bugs on the ground (but not flyers), and frost bites less in the cold. The path doubles back on itself, so plants at the bends hit bugs twice.",
+       [[-1, 2], [10, 2], [10, 6], [5, 6], [5, 11], [15, 11], [15, 4], [20, 4], [20, 14], [25, 14]],
+       1.0, 740, "#a9c3b8", "#a1bbb0", 1225, false,
+       [[[-1, 8.5], [8, 8.5], [17, 1], [25, 14]], [[-1, 16], [12, 16], [18, 9], [25, 14]]],
+       [
+        [1.02, [[Ant, 28, 0.3, 0], [Butterfly, 10, 0.45, 3], [Cricket, 7, 0.76, 6]]],
+        [1.18, [[Beetle, 14, 0.76, 0], [Scorpion, 4, 2.27, 4], [Caterpillar, 5, 1.51, 6]]],
+        [1.34, [[Wasp, 24, 0.26, 0], [Mosquito, 4, 2.65, 4], [Butterfly, 14, 0.45, 6], [GoldenBeetle, 1, 1, 10]]],
+        [1.65, [[Cricket, 18, 0.6, 0], [Scorpion, 6, 1.89, 4], [Caterpillar, 6, 1.51, 6], [Butterfly, 18, 0.38, 10]]],
+        [1.83, [[Ant, 42, 0.26, 0], [Beetle, 23, 0.6, 2], [Mosquito, 5, 3.02, 6], [Snail, 2, 6, 8], [Caterpillar, 6, 1.51, 12], [Butterfly, 18, 0.38, 14], [Bat, 1, 1, 16]]]],
+       25, 17, 'Winter',
+       [[17, 6, 1], [18, 6, 1], [17, 7, 1], [18, 7, 1], [17, 8, 1], [18, 8, 1], [18, 9, 1], [16, 7, 2], [19, 8, 2]], 0.85, 0.8],
+      ["Snowdrift Hollow", "Deep snow slows the walkers, but frost is weaker in the cold. Three sky lanes, a frozen pond and two snails: every bug you've met is here.",
+       [[-1, 3], [8, 3], [8, 7], [3, 7], [3, 12], [13, 12], [13, 5], [18, 5], [18, 9], [15, 9], [15, 15], [23, 15], [23, 8], [27, 8]],
+       1.0, 1100, "#dfe9ee", "#d6e1e7", 2412, false,
+       [[[-1, 0], [10, 0.5], [20, 2], [27, 8]], [[-1, 17], [10, 17], [20, 11.5], [27, 8]], [[-1, 9.5], [9, 9.5], [17, 13], [27, 8]]],
+       [
+        [0.54, [[Ant, 32, 0.28, 0], [Butterfly, 12, 0.42, 3], [Cricket, 8, 0.71, 6]]],
+        [0.62, [[Beetle, 16, 0.71, 0], [Scorpion, 4, 2.12, 4], [Caterpillar, 6, 1.41, 6]]],
+        [0.70, [[Wasp, 28, 0.25, 0], [Mosquito, 4, 2.47, 4], [Butterfly, 16, 0.42, 6], [GoldenBeetle, 1, 1, 10]]],
+        [0.86, [[Cricket, 21, 0.57, 0], [Scorpion, 8, 1.77, 4], [Caterpillar, 8, 1.41, 6], [Butterfly, 21, 0.35, 10], [Bat, 1, 1, 8]]],
+        [0.95, [[Ant, 47, 0.25, 0], [Beetle, 26, 0.57, 2], [Mosquito, 5, 2.83, 6], [Snail, 2, 6, 8], [Caterpillar, 8, 1.41, 12], [Butterfly, 21, 0.35, 14], [Bat, 1, 1, 16]]]],
+       27, 18, 'Winter',
+       [[6, 14, 1], [7, 14, 1], [8, 14, 1], [6, 15, 1], [7, 15, 1], [8, 15, 1], [9, 15, 1], [20, 4, 0], [25, 13, 0], [10, 8, 0]], 0.85, 0.8],
+      ["Evergreen Summit", "The grand finale on the snowy summit: the longest path, the biggest swarms and three snails. Deep snow slows the bugs, and frost is weaker. Guard the garden!",
+       [[-1, 2], [12, 2], [12, 6], [4, 6], [4, 11], [16, 11], [16, 4], [22, 4], [22, 9], [19, 9], [19, 16], [27, 16], [27, 10], [30, 10]],
+       1.0, 960, "#c9dbe0", "#c0d3d8", 3030, false,
+       [[[-1, 0], [14, 0], [25, 6], [30, 10]], [[-1, 19], [14, 19], [24, 13], [30, 10]], [[-1, 8.5], [10, 8.5], [18, 14], [30, 10]]],
+       [
+        [1.31, [[Ant, 36, 0.27, 0], [Butterfly, 14, 0.4, 3], [Cricket, 9, 0.67, 6]]],
+        [1.49, [[Beetle, 18, 0.67, 0], [Scorpion, 4, 2, 4], [Caterpillar, 7, 1.33, 6]]],
+        [1.68, [[Wasp, 32, 0.23, 0], [Mosquito, 4, 2.33, 4], [Butterfly, 18, 0.4, 6], [GoldenBeetle, 1, 1, 10]]],
+        [2.05, [[Cricket, 23, 0.53, 0], [Scorpion, 9, 1.67, 4], [Caterpillar, 9, 1.33, 6], [Butterfly, 23, 0.33, 10], [Bat, 1, 1, 8]]],
+        [2.25, [[Ant, 52, 0.23, 0], [Beetle, 29, 0.53, 2], [Mosquito, 5, 2.67, 6], [Snail, 3, 6, 8], [Caterpillar, 9, 1.33, 12], [Butterfly, 23, 0.33, 14], [Bat, 1, 1, 16]]]],
+       30, 20, 'Winter',
+       [[8, 8, 0], [24, 6, 0], [14, 15, 0], [5, 14, 1], [6, 14, 1], [7, 14, 1], [6, 15, 1], [7, 15, 1], [8, 15, 1], [6, 16, 2]], 0.85, 0.8],].map(mapDef);
+
+  return {
+    TILE: TILE, DEFAULT_COLS: DEFAULT_COLS, DEFAULT_ROWS: DEFAULT_ROWS,
+    SELL_RATE: SELL_RATE, WAVE_BONUS_BASE: WAVE_BONUS_BASE, WAVE_BONUS_PER: WAVE_BONUS_PER,
+    MORTAR_FLIGHT: MORTAR_FLIGHT, FLAME_HALF_ANGLE: FLAME_HALF_ANGLE, START_LIVES: START_LIVES,
+    Projectile: Projectile, Facing: Facing, Season: Season, EnemyType: EnemyType, ENEMY_NAMES: ENEMY_NAMES,
+    TERRAIN_ROCK: TERRAIN_ROCK, TERRAIN_WATER: TERRAIN_WATER, TERRAIN_LILY: TERRAIN_LILY,
+    TOWERS: TOWERS, ENEMIES: ENEMIES, WAVES: WAVES, MAPS: MAPS,
+  };
+})();
+
+if (typeof module !== 'undefined') module.exports = DATA;

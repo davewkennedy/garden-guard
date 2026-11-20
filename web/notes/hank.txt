@@ -1,0 +1,15 @@
+# Hank (lead) — log
+
+Files: index.html, css/style.css, js/ui.js, js/input.js, js/focusfire.js, js/scenes.js, js/main.js, notes/PLAN.txt, notes/STATUS.txt
+
+- ui.js: port of mainwindow.cpp (HUD, shop, plant panel, all cards, autopilot driver, saves under ggweb:).
+- input.js: mouse + touch. Tap = click; double-tap (330 ms, same tile) = double-click; long-press (450 ms) = hover + info toast;
+  drag when zoomed = pan; 2-finger pinch = zoom; wheel = zoom. Touch on tiny tiles (< 34 px) while placing/aiming
+  auto-zooms first ("tap again to plant") so a fat-finger tap never wastes coins.
+  Audio unlock on pointerdown/touchend/click/keydown (iOS needs touchend/click).
+- focusfire.js: port of focusfire.cpp + a "✕ Cancel focus fire" button (touch has no Esc).
+- scenes.js: port of setupScene (?scene=...&map=N).
+- main.js: loop (rAF, dt <= 0.05, `speed` updates per frame), resize, URL options (autopilot, speed up to 20, map,
+  scene, unlock), service worker registration (http/https only).
+- Phone: compact layout under max-height 560px (style.css) + Bill's css/phone.css; rotate screen in portrait;
+  full-screen button (Android: requestFullscreen + landscape lock; iPhone: tells you to Add to Home Screen).

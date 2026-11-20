@@ -1,0 +1,31 @@
+Boomhauer (bugs & plants; was claude2-63): web port log
+Files: js/data.js, js/audio.js, js/journal.js, js/difficulty.js (focusfire.js moved to Hank)
+
+14:32 data.js DONE. Auto-converted from data.h (no hand-typed numbers) and checked in Node.
+  DATA: TILE, DEFAULT_COLS/ROWS, SELL_RATE, WAVE_BONUS_BASE/PER, MORTAR_FLIGHT, FLAME_HALF_ANGLE,
+    START_LIVES, TERRAIN_ROCK/WATER/LILY (0/1/2).
+  Enums: EnemyType {Ant:0 .. Scorpion:11} (ints) + ENEMY_NAMES[]; Projectile/Facing/Season are name strings.
+  TOWERS[11]: {id,name,icon,projectile,projectileSpeed,desc,color,levels[],unlockMap,counters}, and every level
+    has all 14 TowerLevel fields. ENEMIES[12]: all EnemyDef fields with C++ defaults. WAVES[10] and
+    MAPS[i].waves: {hpMult, groups:[{enemy,count,gap,delay}]}. MAPS[10]: all MapDef fields;
+    path/path2 [[c,r]..], skyLanes [[[x,y]..]..], terrain [[c,r,kind]..].
+14:33 audio.js DONE. Sfx.unlock(), Sfx.play(name), Sfx.muted (get/set, saved as ggweb:sound),
+  Sfx.enabled()/setEnabled(on), Sfx.names(). Same 29 recipes and the same synth math as audio.cpp, pre-rendered
+  into AudioBuffers on unlock. 50 ms throttle per sound, max 12 voices. play() is silent before unlock().
+14:34 journal.js DONE. Journal.render(el, game, onClose?) fills el (title, intro, 2 columns that become 1
+  on narrow screens, and a Close (J) button if onClose is given). The column area scrolls inside el, so give
+  el a fixed height. It reads game.mapIndex and game.isUnlocked(i). Journal.metBugs(game) -> bool[].
+14:34 difficulty.js DONE. Difficulty.get() 0/1/2 (ggweb:difficulty, default 1), set(d), label(d?) "🌳 Hard",
+  apply(game) = game.setDifficulty(d) + document.title "Garden Guard++ · <label>", render(el, onChange?)
+  (pills; a click saves the choice, plays 'click' and calls onChange(d), so call apply(game) there too).
+Verified: Node checks for data/audio, plus a headless Chromium test page for journal/difficulty
+  (844x390 and 1280x800).
+14:38 renderer-bugs.js dropped: Bobby already ported drawEnemies, terrain and bug FX in renderer.js. I reviewed his
+  port line by line against my C++ and it matches (sent to Bobby). Next: headless screenshot QA once index.html exists.
+14:44 audio.js: iOS-safe unlock (idempotent; lazy ctx inside the gesture; resume + 1-sample silent buffer whenever the
+  state isn't 'running'; no latch, so iOS background suspends recover on the next gesture).
+14:46 QA: headless screenshots of the real page, maps 3/5/6/9 (1280x800). Rocks, ponds, ice and lily pads sit on the
+  right tiles and match the Qt look; no console errors.
+  PARITY (bugs): the same scenario in Node (game.js) and C++ (game.cpp): wild bat arrival per map 15.8..27.8 s, mean
+  21.1, worst 27.8, never off-board. All 10 maps are IDENTICAL to 0.1 s. Vine on map 2 grounded 6 flyers in both,
+  and mortar canHit only while grounded holds in both. Wind on map 6 caps at 1.50 tiles.

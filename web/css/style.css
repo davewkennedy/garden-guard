@@ -1,0 +1,176 @@
+/* Garden Guard++ web. Colors match the Qt version's style sheet. */
+:root {
+  --bg: #eef6e4; --ink: #24331c; --green: #2f8a3a; --green2: #4caf50; --line: #d6e3c6;
+  --soft: #f4f8ec; --muted: #64735a; --red: #e0533d; --gold: #ffc93c; --brown: #a0683c;
+  --side-w: 306px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Color Emoji", sans-serif;
+  overscroll-behavior: none; }
+body { overflow: hidden; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.hidden { display: none !important; }
+
+#app { position: fixed; inset: 0; display: flex; flex-direction: column;
+  padding: 12px 18px 18px; gap: 12px;
+  padding-left: max(18px, env(safe-area-inset-left)); padding-right: max(18px, env(safe-area-inset-right)); }
+
+/* Header */
+#header { display: flex; align-items: center; gap: 10px; flex: none; }
+#title { font-size: 24px; font-weight: 800; color: var(--green); white-space: nowrap; }
+.stats { flex: 1; display: flex; justify-content: center; gap: 10px; flex-wrap: nowrap; min-width: 0; }
+.stat { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 4px 14px;
+  font-size: 16px; font-weight: 700; white-space: nowrap; transition: background .15s, border-color .15s; }
+.stat.low { color: var(--red); border-color: var(--red); }
+.stat.bump { background: #fff3c4; border-color: var(--gold); }
+.icons { display: flex; gap: 6px; flex: none; }
+
+button { font: inherit; background: #fff; color: var(--ink); border: 1px solid var(--line);
+  border-radius: 10px; padding: 6px 12px; font-weight: 600; cursor: pointer; touch-action: manipulation; }
+button:hover:not(:disabled) { background: var(--soft); }
+button:active:not(:disabled) { background: #e6efda; }
+button:disabled { color: #a3ad99; background: #f3f6ee; cursor: default; }
+button.primary { background: var(--green2); color: #fff; border-color: var(--green); }
+button.primary:hover:not(:disabled) { background: #43a047; }
+button.primary:disabled { background: #b5d8b6; color: #f4f8ec; border-color: #a3cba5; }
+button.danger { background: var(--red); color: #fff; border-color: #b83a27; }
+button.danger:hover:not(:disabled) { background: #cf4732; }
+button.danger:disabled { background: #efb3a9; color: #fbeeeb; }
+button.big { font-size: 16px; font-weight: 700; min-height: 44px; }
+.iconBtn { font-size: 18px; width: 40px; height: 40px; padding: 0; flex: none; }
+.iconBtn.small { width: 32px; height: 32px; font-size: 15px; }
+.iconBtn.on { background: #fff3c4; border-color: var(--gold); }
+
+/* Board */
+#play { flex: 1; display: flex; gap: 16px; min-height: 0; }
+#boardWrap { flex: 1; position: relative; min-width: 0; min-height: 0; }
+#board { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+#board.cross { cursor: crosshair; }
+#toast { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); pointer-events: none;
+  background: rgba(36, 51, 28, .9); color: #fff; font-weight: 700; font-size: 15px;
+  padding: 9px 18px; border-radius: 999px; max-width: 92%; text-align: center; z-index: 2; }
+#toast.error { background: var(--red); }
+#pausedBanner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;
+  background: rgba(20, 32, 14, .75); color: #fff; font-weight: 800; font-size: 30px;
+  padding: 12px 28px; border-radius: 14px; z-index: 2; }
+#btnZoomReset { position: absolute; right: 10px; bottom: 14px; z-index: 2; opacity: .92; }
+
+/* Side panel */
+#side { width: var(--side-w); flex: none; background: #fff; border: 1px solid var(--line); border-radius: 16px;
+  position: relative; display: flex; flex-direction: column; min-height: 0; }
+#sideFoot { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 14px 14px; }
+#sideToggle { display: none; }
+#sideBody { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow-y: auto; min-height: 0; }
+#sideTitle { font-size: 18px; font-weight: 800; }
+#shop { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.shopItem { position: relative; background: var(--soft); border: 2px solid var(--line); border-radius: 12px;
+  padding: 4px 8px 5px; display: grid; grid-template-columns: auto 1fr auto; column-gap: 6px;
+  align-items: center; text-align: left; min-height: 52px; }
+.shopItem:hover:not(:disabled) { border-color: var(--green2); background: var(--soft); }
+.shopItem.checked { background: rgba(76, 175, 80, .18); border-color: var(--green); }
+.shopItem:disabled { background: #f6f7f3; border-color: #e3e8dc; }
+.shopItem.fresh { border-color: #f2b705; background: #fff8dc; }
+.shopItem.fresh.checked { background: rgba(242, 183, 5, .25); }
+.shopIcon { font-size: 24px; line-height: 1.1; }
+.shopCost { font-weight: 700; font-size: 12px; color: var(--brown); white-space: nowrap; }
+.shopItem:disabled .shopCost { color: #d9480f; }
+.shopKey { background: #fff; border: 1px solid var(--line); border-radius: 6px; font-size: 11px;
+  font-weight: 700; color: var(--muted); padding: 0 5px; align-self: start; }
+.shopName { grid-column: 1 / 4; font-weight: 700; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shopItem:disabled .shopName { color: #a3ad99; }
+.shopNew { position: absolute; left: 2px; top: -1px; background: #f2b705; color: #fff; border-radius: 6px;
+  font-size: 9px; font-weight: 800; padding: 0 3px; }
+#shopInfo { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
+  font-size: 12px; color: var(--ink); line-height: 1.35; }
+#shopInfo i { color: var(--muted); }
+
+#towerPanel { background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 12px;
+  display: flex; flex-direction: column; gap: 6px; }
+.tpHead { display: flex; align-items: center; gap: 8px; }
+#tpIcon { font-size: 26px; }
+#tpName { font-size: 16px; font-weight: 800; flex: 1; }
+#tpLevel { color: var(--muted); font-size: 14px; }
+#tpStats { width: 100%; border-collapse: collapse; font-size: 14px; }
+#tpStats td { padding: 1px 0; }
+#tpStats td:last-child { text-align: right; font-weight: 700; }
+.tpActions { display: flex; gap: 6px; }
+#tpUpgrade { flex: 3; } #tpSell { flex: 2; }
+.spacer { flex: 1; }
+#startWave { min-height: 48px; }
+#nextWave { font-size: 14px; font-weight: 600; text-align: center; white-space: pre-line; }
+#hint, #touchHint { color: var(--muted); font-size: 12px; }
+#touchHint { display: none; }
+
+/* Overlays */
+.overlay { position: fixed; inset: 0; background: rgba(20, 32, 14, .55); display: flex; align-items: center;
+  justify-content: center; z-index: 10; padding: 12px; }
+.card { background: #fff; border-radius: 18px; width: 460px; max-width: 100%; max-height: 100%; overflow-y: auto;
+  padding: 28px 32px; display: flex; flex-direction: column; gap: 16px; }
+.card.wide { width: 640px; }
+.cardTitle { font-size: 26px; font-weight: 800; color: var(--green); text-align: center; white-space: pre-line; }
+.cardText { font-size: 15px; text-align: center; white-space: pre-line; line-height: 1.4; }
+.cardText.left { text-align: left; white-space: normal; }
+#journalHost { height: 60vh; min-height: 200px; position: relative; overflow: hidden; }
+#mapList { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 10px; align-items: center; }
+#mapList .mName { font-size: 14px; font-weight: 600; }
+#mapList .mStars { font-size: 15px; color: #9a9a9a; }
+#mapList .mStars.got { color: #f2b705; }
+#mapList button { min-width: 70px; }
+
+#rotate { display: none; position: fixed; inset: 0; z-index: 100; background: var(--bg); color: var(--green);
+  flex-direction: column; align-items: center; justify-content: center; text-align: center; font-weight: 800; }
+#rotate div { font-size: 64px; }
+#rotate p { font-size: 20px; }
+
+/* Touch devices: show touch hints instead of keyboard hints */
+@media (hover: none) and (pointer: coarse) {
+  #hint { display: none; }
+  #touchHint { display: block; }
+  .shopKey { display: none; }
+}
+/* Phones held upright: ask to rotate */
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) and (max-width: 820px) {
+  #rotate { display: flex; }
+}
+
+/* Short screens (phones in landscape): compact everything */
+@media (max-height: 560px) {
+  :root { --side-w: 218px; }
+  #app { padding: 4px 6px 6px; gap: 4px;
+    padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); }
+  #title { display: none; }
+  .stats { gap: 4px; justify-content: flex-start; }
+  .stat { font-size: 12px; padding: 2px 7px; border-radius: 10px; }
+  #statMap .long { display: none; }
+  .icons { gap: 3px; }
+  .iconBtn { width: 32px; height: 32px; font-size: 15px; border-radius: 8px; }
+  #play { gap: 6px; }
+  #side { border-radius: 12px; }
+  #sideToggle { display: block; position: absolute; left: -14px; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 44px; font-size: 13px; z-index: 3; border-radius: 8px; padding: 0; }
+  #sideBody { padding: 6px; gap: 6px; }
+  #sideTitle, #hint, #touchHint { display: none; }
+  #shop { grid-template-columns: 1fr 1fr 1fr; gap: 3px; }
+  .shopItem { min-height: 0; padding: 2px 3px; grid-template-columns: 1fr; text-align: center; border-radius: 9px; }
+  .shopIcon { font-size: 19px; }
+  .shopCost { font-size: 10px; }
+  .shopName, .shopKey { display: none; }
+  .shopNew { font-size: 8px; }
+  #shopInfo { font-size: 11px; padding: 5px 7px; }
+  #towerPanel { padding: 5px 7px; gap: 3px; border-radius: 9px; }
+  #tpIcon { font-size: 20px; } #tpName { font-size: 13px; } #tpLevel { font-size: 11px; }
+  #tpStats { font-size: 11px; }
+  #towerPanel button { font-size: 12px; padding: 4px 6px; }
+  #startWave { min-height: 38px; font-size: 14px; }
+  #nextWave { font-size: 11px; }
+  #toast { top: 6px; font-size: 12px; padding: 5px 12px; }
+  #pausedBanner { font-size: 22px; padding: 8px 20px; }
+  .card { padding: 14px 18px; gap: 9px; border-radius: 14px; width: 520px; }
+  .card.wide { width: 720px; }
+  .cardTitle { font-size: 20px; }
+  .cardText { font-size: 13px; }
+  .card button.big { min-height: 36px; font-size: 14px; }
+  #side.collapsed { width: 0; border: none; }
+  #side.collapsed #sideBody, #side.collapsed #sideFoot { display: none; }
+  #sideFoot { padding: 0 6px 6px; gap: 3px; }
+}

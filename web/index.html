@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Garden Guard++</title>
+<meta name="theme-color" content="#eef6e4">
+<!-- iPhone: "Share > Add to Home Screen" opens it full screen, like an app -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Garden Guard">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/phone.css">
+</head>
+<body>
+<div id="app">
+  <header id="header">
+    <div id="title">Garden Guard++</div>
+    <div class="stats">
+      <span class="stat" id="statMap" title="Campaign map"></span>
+      <span class="stat" id="statCoins"></span>
+      <span class="stat" id="statLives"></span>
+      <span class="stat" id="statWave"></span>
+    </div>
+    <div class="icons">
+      <button class="iconBtn" id="btnJournal" title="Garden Journal (J)">📖</button>
+      <button class="iconBtn" id="btnAuto" title="Autopilot: the AI plays the whole campaign at 2× (A)">🤖</button>
+      <button class="iconBtn" id="btnSpeed" title="Fast forward (F)">1×</button>
+      <button class="iconBtn" id="btnPause" title="Pause (Space)">⏸</button>
+      <button class="iconBtn" id="btnSound" title="Sound">🔊</button>
+      <button class="iconBtn" id="btnFull" title="Full screen">⛶</button>
+    </div>
+  </header>
+
+  <main id="play">
+    <div id="boardWrap">
+      <canvas id="board"></canvas>
+      <div id="toast" class="hidden"></div>
+      <div id="pausedBanner" class="hidden">Paused</div>
+      <button id="btnZoomReset" class="iconBtn hidden" title="Zoom out to the whole garden">🔍</button>
+    </div>
+
+    <aside id="side">
+      <button id="sideToggle" class="iconBtn" title="Hide or show the panel">▸</button>
+      <div id="sideBody">
+        <div id="sideTitle">Plants</div>
+        <div id="shop"></div>
+        <div id="shopInfo" class="hidden"></div>
+
+        <div id="towerPanel" class="hidden">
+          <div class="tpHead">
+            <span id="tpIcon"></span><span id="tpName"></span>
+            <button class="iconBtn small" id="tpClose" title="Close (Esc)">✕</button>
+          </div>
+          <div id="tpLevel"></div>
+          <table id="tpStats"></table>
+          <div class="tpActions">
+            <button id="tpUpgrade" class="primary">Upgrade</button>
+            <button id="tpSell" class="danger">Sell</button>
+          </div>
+          <button id="tpAim" title="Ambush: pick a spot in range. The plant waits for bugs near there instead of shooting the first bug it sees, and hits 30% harder.">🎯 Set fire point (T)</button>
+          <button id="tpCancelFocus" class="hidden">✕ Cancel focus fire</button>
+        </div>
+
+        <div class="spacer"></div>
+        <div id="hint">Tip: hover a plant for details. Keys: number keys pick plants, N next wave, T fire point,
+          A autopilot, Space pause, F speed (1×/2×/3×), J journal, Esc cancel. Double-click a plant to select
+          all of its kind, then click a bug to focus fire.</div>
+        <div id="touchHint">Tap a plant, then tap the garden to plant it. Double-tap a plant to select all
+          of its kind, then tap a bug to focus fire. Pinch to zoom, drag to pan, long-press for info.</div>
+      </div>
+      <!-- Always visible (outside the scrolling part), so the wave button never scrolls away on phones -->
+      <div id="sideFoot">
+        <button id="startWave" class="primary big">Start wave 1</button>
+        <div id="nextWave"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Overlays (cards) -->
+  <div class="overlay hidden" id="ovIntro"><div class="card">
+    <div class="cardTitle">Garden Guard++</div>
+    <div class="cardText" id="introText"></div>
+    <div id="difficultyHost"></div>
+    <button class="primary big" id="btnStart">Let's grow!</button>
+    <button class="big hidden" id="btnContinue"></button>
+    <button class="big hidden" id="btnChoose">🗺️ Choose map</button>
+    <button class="big hidden" id="btnInstall">📲 Install as an app</button>
+  </div></div>
+
+  <div class="overlay hidden" id="ovMapSelect"><div class="card">
+    <div class="cardTitle">Choose a garden</div>
+    <div class="cardText">Start a fresh run with full lives at any garden you've reached.</div>
+    <div id="mapList"></div>
+    <button class="big" id="btnMapBack">Back</button>
+  </div></div>
+
+  <div class="overlay hidden" id="ovNext"><div class="card">
+    <div class="cardTitle" id="nextTitle"></div>
+    <div class="cardText" id="nextText"></div>
+    <button class="primary big" id="btnNext"></button>
+  </div></div>
+
+  <div class="overlay hidden" id="ovBugs"><div class="card">
+    <div class="cardTitle" id="bugsTitle"></div>
+    <div class="cardText left" id="bugsText"></div>
+    <button class="primary big" id="btnBugs">Got it, bring them on!</button>
+  </div></div>
+
+  <div class="overlay hidden" id="ovEnd"><div class="card">
+    <div class="cardTitle" id="endTitle"></div>
+    <div class="cardText" id="endText"></div>
+    <button class="primary big" id="btnAgain">Play again</button>
+  </div></div>
+
+  <div class="overlay hidden" id="ovJournal"><div class="card wide">
+    <div id="journalHost"></div>
+    <button class="primary big" id="btnJournalClose">Close</button>
+  </div></div>
+
+  <div id="rotate"><div>📱↻</div><p>Turn your phone sideways to play</p></div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/game.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/view.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/autopilot.js"></script>
+<script src="js/journal.js"></script>
+<script src="js/difficulty.js"></script>
+<script src="js/focusfire.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/input.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

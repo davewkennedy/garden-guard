@@ -1,0 +1,14 @@
+<!doctype html>
+<!-- browser-run.js self-test (Dale): checks that CDP touch taps reach the page as pointer events + clicks. -->
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<style>body{margin:0;background:#eef6e4}#board{width:600px;height:300px;background:#9c6;touch-action:none}</style></head>
+<body>
+<div class="overlay" id="ov"><button class="primary" id="btnStart" onclick="document.getElementById('ov').classList.add('hidden')">Start</button></div>
+<canvas id="board"></canvas>
+<script>
+window.log = { pointerdown: 0, pointerup: 0, click: 0, touchTypes: [], maxPointers: 0 };
+const live = new Set();
+addEventListener('pointerdown', e => { log.pointerdown++; live.add(e.pointerId); log.maxPointers = Math.max(log.maxPointers, live.size); log.touchTypes.push(e.pointerType); }, true);
+addEventListener('pointerup', e => { log.pointerup++; live.delete(e.pointerId); }, true);
+addEventListener('click', () => log.click++, true);
+</script></body></html>

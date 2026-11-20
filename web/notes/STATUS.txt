@@ -1,0 +1,17 @@
+# Garden Guard++ Web — status board (owner: Hank)
+
+Start 14:29, deadline 15:44 (WSL clock).
+
+## Done
+- 14:32 data.js (Boomhauer) · 14:34 autopilot.js + Node parity: EXACT match with C++ on all 50 waves, Easy/Normal/Hard (Dale)
+- 14:35 game.js (Bill) · audio.js, journal.js, difficulty.js (Boomhauer)
+- 14:37 manifest, icons, sw.js (offline), README.txt (Bill) · tools/shot.sh, tools/browser-run.js (Dale)
+- 14:37 view.js + renderer.js, full port (Bobby) · index.html, style.css, ui.js, input.js, focusfire.js, scenes.js, main.js (Hank)
+- 14:38 First integrated build: no console errors; touch QA ALL OK on iPhone and Android sizes
+  (tap shop -> plant, select, double-tap group, long-press, pinch 1x->4x, pan)
+
+## Backlog (future sessions, not this port)
+- Power-ups (user idea via Peggy): first with in-game coins/stars, e.g. "Fertilizer: plants fire 2x for 10 s",
+  "Bug spray: damage everything on screen". Real-money purchases deferred: needs payments + a server
+  (localStorage saves are easy to cheat), native wrappers for app-store purchases (15-30% fee), legal/tax,
+  and balance risk (maps are tuned to be winnable without help).

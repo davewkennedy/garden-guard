@@ -1,0 +1,63 @@
+Test 3: autopilot campaign (normal coins)
+      wave  1: lives 20 coins   85 plants: sprout1@11,6 sprout1@12,6 frost1@4,5
+      wave  2: lives 20 coins  107 plants: sprout1@11,6 sprout1@12,6 frost1@4,5 mortar1@11,5
+      wave  3: lives 20 coins   52 plants: sprout1@11,6 sprout1@12,6 frost1@4,5 mortar1@11,5 mortar1@4,4 mortar1@4,3
+      wave  4: lives 20 coins   60 plants: sprout2@11,6 sprout2@12,6 frost1@4,5 mortar1@11,5 mortar1@4,4 mortar1@4,3 frost1@8,3
+      wave  5: lives 20 coins   99 plants: sprout2@11,6 sprout2@12,6 frost1@4,5 mortar1@11,5 mortar1@4,4 mortar1@4,3 frost1@8,3 sprout2@8,4 sprout2@11,7 sprout1@12,7
+    map 1 Sunny Meadow   -> cleared at wave 5, lives 20, plants 10
+      wave  1: lives 20 coins   33 plants: sprout1@8,6 corn1@13,3 sprout1@13,4 frost1@8,7 corn1@9,7 mortar1@5,3
+      wave  2: lives 20 coins   76 plants: sprout1@8,6 corn1@13,3 sprout1@13,4 frost1@8,7 corn1@9,7 mortar1@5,3 corn1@11,6
+      wave  3: lives 20 coins   79 plants: sprout1@8,6 corn1@13,3 sprout1@13,4 frost1@8,7 corn1@9,7 mortar1@5,3 corn1@11,6 grape1@4,9 mortar1@5,4
+      wave  4: lives 20 coins   59 plants: sprout2@8,6 corn1@13,3 sprout2@13,4 frost2@8,7 corn1@9,7 mortar1@5,3 corn1@11,6 grape1@4,9 mortar1@5,4 frost1@9,6
+      wave  5: lives 20 coins  122 plants: sprout2@8,6 corn1@13,3 sprout2@13,4 frost2@8,7 corn1@9,7 mortar1@5,3 corn1@11,6 grape1@4,9 mortar1@5,4 frost2@9,6 sprout2@2,8 sprout2@10,7
+    map 2 Apple Orchard  -> cleared at wave 5, lives 20, plants 12
+      wave  1: lives 20 coins   23 plants: sprout1@11,5 corn1@10,5 sprout1@10,4 frost1@11,4 corn1@2,2 mushroom1@3,2 mortar1@3,3
+      wave  2: lives 20 coins   72 plants: sprout1@11,5 corn1@10,5 sprout1@10,4 frost1@11,4 corn1@2,2 mushroom1@3,2 mortar1@3,3 cactus1@8,5
+      wave  3: lives 20 coins   22 plants: sprout2@11,5 corn1@10,5 sprout2@10,4 frost2@11,4 corn1@2,2 mushroom1@3,2 mortar1@3,3 cactus1@8,5 corn1@13,5
+      wave  4: lives 20 coins   60 plants: sprout2@11,5 corn2@10,5 sprout2@10,4 frost2@11,4 corn2@2,2 mushroom1@3,2 mortar1@3,3 cactus1@8,5 corn1@13,5
+      wave  5: lives 20 coins  167 plants: sprout2@11,5 corn2@10,5 sprout2@10,4 frost2@11,4 corn2@2,2 mushroom2@3,2 mortar1@3,3 cactus1@8,5 corn2@13,5 grape2@3,0
+    map 3 Thorny Ridge   -> cleared at wave 5, lives 20, plants 10
+      wave  1: lives 20 coins   76 plants: sprout1@16,4 corn1@13,3 sprout1@13,2 frost1@9,8 corn1@16,5 mushroom1@13,5 mortar1@5,4 rose1@13,4
+      wave  2: lives 18 coins   68 plants: sprout2@16,4 corn1@13,3 sprout1@13,2 frost1@9,8 corn1@16,5 mushroom1@13,5 mortar1@5,4 rose1@13,4 cactus1@10,5
+      wave  3: lives 18 coins   70 plants: sprout2@16,4 corn2@13,3 sprout2@13,2 frost2@9,8 corn1@16,5 mushroom1@13,5 mortar1@5,4 rose1@13,4 cactus1@10,5 corn1@9,7
+      wave  4: lives 18 coins   22 plants: sprout2@16,4 corn2@13,3 sprout2@13,2 frost2@9,8 corn2@16,5 mushroom2@13,5 mortar1@5,4 rose1@13,4 cactus1@10,5 corn2@9,7
+      wave  5: lives 18 coins  234 plants: sprout3@16,4 corn2@13,3 sprout3@13,2 frost2@9,8 corn2@16,5 mushroom2@13,5 mortar1@5,4 rose2@13,4 cactus1@10,5 corn2@9,7
+    map 4 Harvest Hollow -> cleared at wave 5, lives 18, plants 10
+      wave  1: lives 18 coins   18 plants: sprout1@17,9 corn1@16,9 sprout1@13,3 frost1@3,7 corn1@12,6 mushroom1@3,8 mortar1@12,3 rose1@4,3
+      wave  2: lives 18 coins   79 plants: sprout1@17,9 corn1@16,9 sprout1@13,3 frost1@3,7 corn1@12,6 mushroom1@3,8 mortar1@12,3 rose1@4,3 cactus1@6,6
+      wave  3: lives 18 coins   24 plants: sprout2@17,9 corn2@16,9 sprout2@13,3 frost2@3,7 corn1@12,6 mushroom1@3,8 mortar1@12,3 rose1@4,3 cactus1@6,6
+      wave  4: lives 18 coins   55 plants: sprout2@17,9 corn2@16,9 sprout2@13,3 frost2@3,7 corn2@12,6 mushroom1@3,8 mortar1@12,3 rose1@4,3 cactus1@6,6 corn1@13,6
+      wave  5: lives 18 coins  189 plants: sprout2@17,9 corn2@16,9 sprout2@13,3 frost2@3,7 corn2@12,6 mushroom2@3,8 mortar1@12,3 rose2@4,3 cactus1@6,6 corn2@13,6
+    map 5 Moonlit Garden -> cleared at wave 5, lives 18, plants 10
+      wave  1: lives 18 coins   63 plants: sprout1@18,7 corn1@20,8 sprout1@15,5 frost1@19,6 corn1@15,6 mushroom1@18,6 mortar1@6,10 rose1@16,7 cactus1@17,8
+      wave  2: lives 18 coins    7 plants: sprout2@18,7 corn2@20,8 sprout2@15,5 frost2@19,6 corn1@15,6 mushroom1@18,6 mortar1@6,10 rose1@16,7 cactus1@17,8
+      wave  3: lives 17 coins   37 plants: sprout2@18,7 corn2@20,8 sprout2@15,5 frost2@19,6 corn2@15,6 mushroom2@18,6 mortar1@6,10 rose1@16,7 cactus1@17,8 corn1@8,11
+      wave  4: lives 16 coins    8 plants: sprout3@18,7 corn2@20,8 sprout3@15,5 frost2@19,6 corn2@15,6 mushroom2@18,6 mortar1@6,10 rose2@16,7 cactus1@17,8 corn2@8,11
+      wave  5: lives 16 coins  182 plants: sprout3@18,7 corn2@20,8 sprout3@15,5 frost3@19,6 corn2@15,6 mushroom2@18,6 mortar2@6,10 rose2@16,7 cactus1@17,8 corn2@8,11 clover2@17,7 chili1@3,3
+    map 6 Amber Woods    -> cleared at wave 5, lives 16, plants 12
+      wave  1: lives 16 coins   37 plants: sprout2@18,10 corn1@20,10 sprout2@21,10 frost1@16,13 corn1@15,13 mushroom1@17,13 mortar1@16,11 rose1@19,8 cactus1@15,10
+      wave  2: lives 16 coins   47 plants: sprout2@18,10 corn2@20,10 sprout2@21,10 frost2@16,13 corn2@15,13 mushroom1@17,13 mortar1@16,11 rose1@19,8 cactus1@15,10
+      wave  3: lives 14 coins   19 plants: sprout2@18,10 corn2@20,10 sprout2@21,10 frost2@16,13 corn2@15,13 mushroom2@17,13 mortar1@16,11 rose2@19,8 cactus1@15,10 corn2@18,12
+      wave  4: lives 14 coins   43 plants: sprout3@18,10 corn2@20,10 sprout3@21,10 frost3@16,13 corn2@15,13 mushroom2@17,13 mortar2@16,11 rose2@19,8 cactus1@15,10 corn2@18,12
+      wave  5: lives 14 coins  119 plants: sprout3@18,10 corn2@20,10 sprout3@21,10 frost3@16,13 corn2@15,13 mushroom2@17,13 mortar2@16,11 rose2@19,8 cactus2@15,10 corn2@18,12 clover2@18,9 chili2@18,11 grape2@22,10
+    map 7 Pumpkin Patch  -> cleared at wave 5, lives 14, plants 13
+      wave  1: lives 14 coins   81 plants: sprout2@22,12 corn1@22,13 sprout2@21,12 frost2@21,10 corn1@21,9 mushroom1@21,11 mortar1@7,4 rose1@22,11 cactus1@16,7
+      wave  2: lives 14 coins   36 plants: sprout2@22,12 corn2@22,13 sprout2@21,12 frost2@21,10 corn2@21,9 mushroom2@21,11 mortar1@7,4 rose1@22,11 cactus1@16,7 corn1@23,12
+      wave  3: lives 14 coins   38 plants: sprout3@22,12 corn2@22,13 sprout3@21,12 frost2@21,10 corn2@21,9 mushroom2@21,11 mortar1@7,4 rose2@22,11 cactus1@16,7 corn2@23,12
+      wave  4: lives 14 coins   88 plants: sprout3@22,12 corn2@22,13 sprout3@21,12 frost3@21,10 corn2@21,9 mushroom2@21,11 mortar2@7,4 rose2@22,11 cactus1@16,7 corn2@23,12 clover2@22,10
+      wave  5: lives 14 coins  198 plants: sprout3@22,12 corn2@22,13 sprout3@21,12 frost3@21,10 corn2@21,9 mushroom2@21,11 mortar2@7,4 rose2@22,11 cactus2@16,7 corn2@23,12 clover2@22,10 chili2@6,10 grape2@23,11 mortar2@8,4 rose2@7,8
+    map 8 Frost Fen      -> cleared at wave 5, lives 14, plants 15
+      wave  1: lives 12 coins  114 plants: sprout2@16,13 corn2@25,9 sprout2@24,10 frost2@24,9 corn2@14,13 mushroom2@17,13 mortar1@15,8 rose1@16,12 cactus1@19,12 corn1@16,14
+      wave  2: lives 12 coins   75 plants: sprout3@16,13 corn2@25,9 sprout3@24,10 frost2@24,9 corn2@14,13 mushroom2@17,13 mortar1@15,8 rose2@16,12 cactus1@19,12 corn2@16,14
+      wave  3: lives 12 coins   72 plants: sprout3@16,13 corn2@25,9 sprout3@24,10 frost3@24,9 corn2@14,13 mushroom2@17,13 mortar2@15,8 rose2@16,12 cactus2@19,12 corn2@16,14 clover1@25,10
+      wave  4: lives 12 coins   70 plants: sprout3@16,13 corn2@25,9 sprout3@24,10 frost3@24,9 corn2@14,13 mushroom2@17,13 mortar2@15,8 rose2@16,12 cactus2@19,12 corn2@16,14 clover2@25,10 chili1@14,10 grape2@25,7 mortar2@15,7
+      wave  5: lives 12 coins  219 plants: sprout3@16,13 corn2@25,9 sprout3@24,10 frost3@24,9 corn2@14,13 mushroom2@17,13 mortar2@15,8 rose2@16,12 cactus2@19,12 corn2@16,14 clover2@25,10 chili2@14,10 grape3@25,7 mortar2@15,7 rose2@13,13 cactus1@19,11 mushroom2@14,12 clover1@17,12 frost2@14,11
+    map 9 Snowdrift Hollow -> cleared at wave 5, lives 12, plants 19
+      wave  1: lives  9 coins    8 plants: sprout2@28,11 corn2@20,14 sprout2@20,15 frost2@21,14 corn2@28,12 mushroom2@21,15 mortar1@9,4 rose1@25,14 cactus1@23,12 corn1@26,12
+      wave  2: lives  9 coins    5 plants: sprout3@28,11 corn2@20,14 sprout3@20,15 frost2@21,14 corn2@28,12 mushroom2@21,15 mortar1@9,4 rose2@25,14 cactus1@23,12 corn2@26,12
+      wave  3: lives  9 coins   62 plants: sprout3@28,11 corn2@20,14 sprout3@20,15 frost3@21,14 corn2@28,12 mushroom2@21,15 mortar2@9,4 rose2@25,14 cactus1@23,12 corn2@26,12 clover2@29,11
+      wave  4: lives  6 coins  103 plants: sprout3@28,11 corn2@20,14 sprout3@20,15 frost3@21,14 corn2@28,12 mushroom2@21,15 mortar2@9,4 rose2@25,14 cactus1@23,12 corn2@26,12 clover2@29,11 chili1@5,7 grape2@25,12 mortar2@10,4 rose1@27,9
+      wave  5: lives  6 coins  201 plants: sprout3@28,11 corn2@20,14 sprout3@20,15 frost3@21,14 corn2@28,12 mushroom2@21,15 mortar2@9,4 rose2@25,14 cactus2@23,12 corn2@26,12 clover2@29,11 chili2@5,7 grape3@25,12 mortar2@10,4 rose2@27,9 cactus2@23,13 mushroom2@26,11 clover1@24,13 frost3@28,9
+    map 10 Evergreen Summit -> WON at wave 5, lives 6, plants 19
+  [ ok ] autopilot wins the whole campaign with normal coins
+    autopilot result: won the campaign

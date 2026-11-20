@@ -1,0 +1,24 @@
+Garden Guard++ web: parity report (owner: Dale)
+================================================
+
+How to run (WSL, in gardenguard++web/):
+  node tools/parity.js            Normal campaign + Easy + Hard, compared to the C++ (about 3 s)
+  node tools/parity.js --waves    also diffs every wave (lives, coins, every plant id/level/tile)
+  node tools/parity.js --normal   Normal only
+
+Baseline: ~/projects/garden-plusplus/build/de/garden_simtest (built Nov 19 17:30, 86/86 ok),
+captured 2026-11-20 14:31 into tools/baseline/de_base.txt and de_verbose.txt
+(AUTOPILOT_VERBOSE=1 per-wave log of Test 3). The C++ game logic has no RNG (the bat wander is
+sines seeded by id), so the JS port should match EXACTLY, not just closely.
+
+Result 14:33 (data.js from Boomhauer at 14:32, game.js from Bill, 940 lines; autopilot.js from Dale):
+
+  Mode     C++ lives per map               JS lives per map                Result
+  Normal   20/20/20/18/18/16/14/14/12/6    20/20/20/18/18/16/14/14/12/6    WON  = WON
+  Easy     20/20/20/20/20/20/20/20/18/18   20/20/20/20/20/20/20/20/18/18   WON  = WON
+  Hard     19/19/12/4/4/0                  19/19/12/4/4/0                  LOST map 6 wave 4 (both)
+
+  Per-wave diff (Normal, 50 waves + 10 map lines): IDENTICAL: same lives, coins and plant
+  layout after every wave. Plants per map: 10/12/10/10/10/12/13/15/19/19 on both.
+
+PARITY OK. Re-run after any change to game.js / data.js / autopilot.js.

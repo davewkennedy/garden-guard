@@ -1,0 +1,95 @@
+# Garden Guard++ Web — team plan and conventions (owner: Hank; read-only for others)
+
+Start 14:29 (WSL `date`). DEADLINE 15:44. Milestones:
+- 14:55  every module loads without errors (stubs OK) -> first integrated page
+- 15:15  playable end to end on PC (map 1 -> map 2)
+- 15:30  FEATURE FREEZE. After this: bug fixes and QA only.
+- 15:40  final QA screenshots + parity report; Hank writes summary at 15:41-15:44
+
+## Goal
+Faithful port of the Qt Garden Guard++ (~/projects/garden-plusplus, READ-ONLY: never edit it)
+to plain HTML/CSS/JS, plus phones (iPhone + Android) in landscape: full screen, touch, pinch-zoom.
+
+## Location
+Windows: C:\Users\david\claude\claude2\gardenguard++web\
+WSL:     /mnt/c/Users/david/claude/claude2/gardenguard++web/
+Tools: node v20 (`node`), headless `chromium` in WSL.
+
+## Hard rules
+- NO build tools, NO npm packages, NO ES modules (`import`/`export`): index.html must work when
+  double-clicked (file://). Plain <script> tags, each file defines ONE global.
+- Each file has ONE owner. Only edit your own files. Need something in another file? Message its owner
+  (or Hank). Announce before editing anything shared (only index.html / style.css, both Hank's).
+- game.js, data.js, autopilot.js must NOT touch the DOM/window: they must run in Node too.
+  End them with:  if (typeof module !== 'undefined') module.exports = <Global>;
+  In Node they're loaded in order: data.js, game.js, autopilot.js (Dale's tools/ load them via require
+  and put them on globalThis).
+- Keep the C++ names (camelCase, drop trailing `_`): Game.update(dt), pickTarget, focusFire, waves(),
+  isUnlocked, etc. Enums become frozen objects / string constants with the same names.
+- World coordinates are logical pixels, TILE = 64, exactly as in C++.
+- Saves: localStorage, keys prefixed "ggweb:"; always wrap in try/catch.
+- Write a 5-10 line log in notes/<yourname>.txt (what's done, what's left, API you expose).
+
+## Files and owners
+| File | Owner | Ports from | Global |
+|---|---|---|---|
+| index.html, css/style.css, js/main.js, js/ui.js, js/input.js | Hank | main.cpp, mainwindow.*, boardwidget.* | UI, Input, (main) |
+| js/data.js | Boomhauer | data.h | DATA (TILE, TOWERS, ENEMIES, MAPS, ... same names) |
+| js/audio.js | Boomhauer | audio.* | Sfx (NOT "Audio": that's a browser built-in) |
+| js/journal.js, js/difficulty.js, js/focusfire.js | Boomhauer | journal.cpp, difficulty.cpp, focusfire.cpp | Journal, Difficulty, FocusFire |
+| js/game.js | Bill | game.h, game.cpp | Game (class) |
+| js/renderer.js, js/view.js | Bobby | renderer.*, scaling parts of boardwidget | Renderer, View |
+| js/autopilot.js, tools/parity.js, tools/shot.sh | Dale | autopilot.*, tests/simtest.cpp | Autopilot |
+
+Script order in index.html: data, game, audio, view, renderer, autopilot, journal, difficulty,
+focusfire, ui, input, main.
+
+## Interfaces (agree on these; extend in your notes if needed)
+- Game: `new Game()`; `reset(startMap=0)`; `update(dt)` (seconds, dt <= 0.05, called `speed` times per
+  frame like MainWindow::tick); public fields as in game.h (towers, enemies, projectiles, coins, lives,
+  phase, mapIndex, cols, rows, W, H, ...). Signals -> tiny emitter: `game.on(name, fn)`, internally
+  `this.emit(name, ...args)`. Same signal names as game.h (shot, killed, leaked, placed, upgraded, sold,
+  waveStarted, waveEnded, mapCleared, mapStarted, won, lost, bugSound, wildcard, gust).
+  Settings the C++ reads from QSettings (difficulty, unlocks, journal) -> Bill exposes plain fields/
+  methods; UI/Boomhauer persist them in localStorage.
+- View (Bobby): owns the camera for the board canvas. `View.resize(cssW, cssH, dpr, game)` fits the
+  whole map (like setupScale); `View.zoomAt(screenX, screenY, factor)`, `View.panBy(dx, dy)`,
+  `View.reset()`, `View.screenToWorld(x, y) -> {x, y}`, `View.worldToScreen`. Clamp zoom to
+  [fit, fit*4] and keep the map on screen.
+- Renderer (Bobby): `Renderer.draw(ctx, game, view, ui)` where ui = { hoverTile, selection,
+  placingType, rangePreview, time, ... } (Hank passes; tell Hank what you need). All the seasons,
+  weather, terrain, sky lanes, fire points, reticles, boss bar, FX.
+- Input (Hank): pointer events on the canvas. Tap = click, double-tap = double-click (focus fire),
+  long-press = hover/info, 1-finger drag when zoomed = pan, 2-finger pinch = View.zoomAt.
+  Mouse wheel = zoom on PC. Keyboard shortcuts as in Qt.
+- Sfx (Boomhauer): `Sfx.unlock()` (call on first pointerdown), `Sfx.play(name)`, `Sfx.muted`.
+  Same synthesized sounds as audio.cpp.
+- Autopilot (Dale): `new Autopilot(game)`, `step()` called each frame like the C++.
+
+## Phone / layout (Hank)
+- Landscape: board fills the screen, compact side strip that can collapse; portrait shows "rotate".
+- Full screen button: requestFullscreen + screen.orientation.lock('landscape') (Android);
+  iPhone: apple-mobile-web-app-capable + manifest so "Add to Home Screen" runs full screen.
+- On-screen buttons for every keyboard shortcut.
+
+## Testing
+- Node parity (Dale): run the same autopilot games as simtest in Node; compare to the C++ numbers.
+- Screenshots (anyone): `chromium --headless --disable-gpu --hide-scrollbars --window-size=844,390
+  --screenshot=shots/x.png "file:///mnt/c/Users/david/claude/claude2/gardenguard++web/index.html?scene=play&map=3"`
+  URL params (main.js, Hank): scene=play|placing|mapclear|win|lose|night|focus|journal|mapselect,
+  map=N, autopilot=1, speed=N, delay=ms. Use --virtual-time-budget=3000 to let it run.
+  Sizes: PC 1280x800, iPhone 844x390, Android 915x412.
+- Check the browser console for errors: add `--enable-logging=stderr --v=0`.
+
+## Enum and naming rules (added 14:40, binding for everyone)
+- Enums from data.h live on DATA: e.g. DATA.Projectile.Mortar, DATA.Season.Winter. Enums that the C++
+  uses as array indices (EnemyType, tower types) stay INTEGERS in the same order; all other enums are
+  frozen objects whose values are their name strings: DATA.Projectile = {None:'None', Mortar:'Mortar', ...}.
+  Terrain kinds: DATA.TERRAIN_WATER etc., same values as C++.
+- Enums from game.h live on Game as statics: Game.Phase.Build ('Build'), Game.Difficulty.Easy (0/1/2,
+  integers), Game.EffectKind.Hit ('Hit').
+- Constants from game.h: Game.FIRE_POINT_RADIUS, Game.AMBUSH_BONUS.
+- Methods that return a pointer in C++ return the object or null in JS (towerAt, getTower, pickTarget,
+  placeTower). Methods taking `const Tower &t` take the tower object.
+- QPointF becomes {x, y}. QString becomes a string. std::optional becomes null when empty.
+- Strings with emoji: copy them exactly from the C++ source.

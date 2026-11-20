@@ -1,0 +1,67 @@
+/* Garden Guard++ web: layout overrides (owner: Bill). Loaded after style.css.
+   1) Laptops/tablets 561-900px tall: compact shop chips while a plant is selected.
+   2) Phones in landscape (<= 560px tall): compact everything. */
+/* Narrow-but-tall screens (iPad landscape 1024x768): the header's title, stats and icons overlapped. */
+@media (min-height: 561px) and (max-width: 1180px) {
+  #title { font-size: 19px; }
+  .stats { gap: 6px; }
+  .stat { font-size: 14px; padding: 3px 10px; }
+  .icons { gap: 4px; }
+}
+@media (min-height: 561px) and (max-height: 900px) {
+  /* While a plant is selected the shop cards drop their name line (icon + cost + key stay), so the tower
+     panel's 🎯 and Cancel focus stay above the wave footer even with 11 plants (map 10). */
+  #sideBody:has(#towerPanel:not(.hidden)) .shopItem { min-height: 0; padding: 2px 8px; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopName { display: none; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopIcon { font-size: 20px; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopKey { align-self: center; }
+  #sideBody:has(#towerPanel:not(.hidden)) #shop { gap: 4px; }
+  #sideBody:has(#towerPanel:not(.hidden)) #shopInfo { display: none; }
+}
+
+@media (max-height: 560px) {
+  /* #5 Bigger touch targets in the header and on the side toggle. */
+  .iconBtn { width: 36px; height: 36px; font-size: 16px; }
+  #sideToggle { width: 28px; height: 52px; left: -18px; font-size: 14px; }
+
+  /* #1 Tower panel: compact, so Upgrade/Sell, 🎯 and Cancel focus fit at 844x390 even with 11 plants. */
+  /* While a plant is selected, the shop shrinks to one line per plant (icon + price), 3 per row. */
+  #sideBody:has(#towerPanel:not(.hidden)) #shop { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopItem {
+    display: flex; align-items: center; justify-content: center; gap: 1px; padding: 1px 1px; border-width: 1px; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopIcon { font-size: 15px; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopCost { font-size: 9px; letter-spacing: -.2px; }
+  #sideBody:has(#towerPanel:not(.hidden)) .shopNew { display: none; }
+  #sideBody:has(#towerPanel:not(.hidden)) #shopInfo { display: none; }
+
+  #towerPanel { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 4px 6px 5px; }
+  #towerPanel > * { grid-column: 1 / -1; min-width: 0; }
+  .tpHead { gap: 4px; }
+  #tpIcon { font-size: 17px; }
+  #tpName { font-size: 12px; line-height: 1.1; }
+  #tpClose { width: 26px; height: 26px; font-size: 12px; }
+  #tpLevel { font-size: 10px; margin-top: -3px; }
+  /* Stats in two columns: "name value" pairs. */
+  #tpStats, #tpStats tbody { display: grid; grid-template-columns: 1fr 1fr; column-gap: 6px; row-gap: 0; font-size: 10px; }
+  #tpStats tbody { grid-column: 1 / -1; }
+  #tpStats tr { display: flex; justify-content: space-between; gap: 3px; min-width: 0; line-height: 1.25; }
+  #tpStats tr:last-child:nth-child(odd) { grid-column: 1 / -1; }   /* odd last stat gets the full width */
+  #tpStats td { padding: 0; }
+  #tpStats td:first-child { color: var(--muted); white-space: nowrap; }
+  #tpStats td:last-child { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #towerPanel button { font-size: 11px; padding: 3px 4px; min-height: 28px; line-height: 1.1; }
+  /* 🎯 and Cancel focus side by side when both show. */
+  #tpAim:has(+ #tpCancelFocus:not(.hidden)), #tpCancelFocus { grid-column: auto; }
+
+  /* #2 Map select: two maps per row (1|2, 3|4, ...), Back always visible at 844x390. */
+  #ovMapSelect .card { width: 780px; gap: 7px; padding: 10px 14px 12px; }
+  #ovMapSelect .cardText { font-size: 12px; }
+  #mapList { grid-template-columns: 1fr auto auto 1fr auto auto; gap: 4px 8px; }
+  #mapList .mName { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #mapList .mStars { font-size: 12px; }
+  #mapList button { min-width: 58px; min-height: 34px; padding: 2px 8px; font-size: 13px; }
+  #mapList button:nth-of-type(odd) { margin-right: 10px; }
+
+  /* #3 Journal: use the height the removed title freed up. */
+  #journalHost { height: calc(100vh - 96px); height: calc(100dvh - 96px); min-height: 160px; }
+}

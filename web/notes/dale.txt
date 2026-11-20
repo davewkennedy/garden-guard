@@ -1,0 +1,17 @@
+Dale (maps/balance -> autopilot, parity, screenshots)
+- 14:31 js/autopilot.js: faithful port of autopilot.cpp (plans, tileScore, placeNext, upgradeOne,
+  focus, think). API: new Autopilot(game); ai.think() (C++ calls it every 0.5 s of game time);
+  ai.step() = per-frame driver like MainWindow::runAutopilot: thinks every 0.5 s of game.time and
+  calls game.startWave() after 2 s of Build. The UI still handles the map-cleared card (nextMap),
+  pause and end screens. Env vars AUTOPILOT_PLAN/NOFOCUS/MODE work in Node only.
+- 14:31 C++ baseline captured -> tools/baseline/ (Test 3 + Test D + per-wave verbose log).
+- 14:32 tools/shot.sh NAME [QUERY] [pc,iphone,android] [BUDGET_MS] -> shots/NAME-SIZE.png, prints
+  page console lines (errors -> exit 1). Tested: about 0.7 s per shot.
+- 14:33 tools/parity.js: EXACT parity on Normal/Easy/Hard, every wave identical. See notes/parity.txt.
+- 14:37 tools/browser-run.js: CDP runner (Node WebSocket, no npm). Options: --size pc|iphone|android,
+  --query, --seconds, --touch (tap shop/tile/plant, double-tap, long-press, pinch, pan), --campaign
+  (autopilot=1&speed=20 until Won/Lost), --shot, --eval EXPR, --page, --no-stub (it auto-stubs a
+  missing Renderer). Exit 1 on console.error/uncaught/failed check. tools/stub.html = touch self-test.
+  Found: renderer.js missing, ui.js View.fit() not a function (Hank fixed).
+- 14:38 --touch ALL OK on iphone + android, 0 errors.
+- Left: rerun parity after changes; QA screenshots at the milestones.
