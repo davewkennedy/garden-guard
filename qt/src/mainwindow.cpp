@@ -57,6 +57,11 @@ QPushButton[kind="big"] { font-size: 16px; font-weight: 700; min-height: 40px; }
 #shopItem:hover { border-color: #4caf50; }
 #shopItem:checked { background: rgba(76, 175, 80, 0.18); border: 2px solid #2f8a3a; }
 #shopItem:disabled { background: #f6f7f3; border-color: #e3e8dc; }
+#shopItem[fresh="true"] { border-color: #f2b705; background: #fff8dc; }
+#shopNew {
+  background: #f2b705; color: #ffffff; border-radius: 6px;
+  font-size: 10px; font-weight: 800; padding: 0 4px;
+}
 #shopIcon { font-size: 24px; }
 #shopName { font-weight: 700; font-size: 12px; }
 #shopCost { font-weight: 700; font-size: 12px; color: #a0683c; }
@@ -125,7 +130,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     board_ = new BoardWidget(&game_);
     connect(board_, &BoardWidget::tileHovered, this, &MainWindow::onHover);
+    connect(board_, &BoardWidget::pointClicked, this, [this](double x, double y) { lastClick_ = QPointF(x, y); });
     connect(board_, &BoardWidget::tileClicked, this, &MainWindow::onClick);
+    connect(board_, &BoardWidget::tileDoubleClicked, this, &MainWindow::onDoubleClick);
+    connect(&game_, &Game::wildcard, this, [this] { board_->showToast(QStringLiteral("🦇 A wild bat appears! Catch it for 30 coins!")); });
     connect(board_, &BoardWidget::hoverLeft, this, [this] { board_->view.hover.reset(); });
 
     auto *play = new QHBoxLayout;
@@ -178,18 +186,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
             cont->setMinimumHeight(40);
             cont->setFocusPolicy(Qt::StrongFocus);
             if (auto *card = intro_->findChild<QFrame *>("card")) card->layout()->addWidget(cont);
-            connect(cont, &QPushButton::clicked, this, [this, furthest] {
+            connect(cont, &QPushButton::clicked, this, [this, furthest] { startRunAt(furthest); });
+            auto *choose = button("🗺️ Choose map");
+            choose->setMinimumHeight(40);
+            choose->setFocusPolicy(Qt::StrongFocus);
+            if (auto *card = intro_->findChild<QFrame *>("card")) card->layout()->addWidget(choose);
+            connect(choose, &QPushButton::clicked, this, [this, furthest] {
                 sfx("click");
-                runKills_ = runPlanted_ = runShots_ = runCoins_ = 0;
-                runStars_.clear();
-                game_.reset(furthest);
-                clearView();
-                intro_->hide();
-                centralWidget()->setFocus();
-                showNewBugs();
+                showMapSelect(furthest);
             });
         }
     }
+    buildMapSelect();
     end_ = buildOverlay(endTitle_, endText_, again);
     again->setText("Play again");
     connect(again, &QPushButton::clicked, this, &MainWindow::playAgain);
@@ -316,8 +324,8 @@ QPushButton *MainWindow::makeShopItem(int type, int index) {
     auto *b = button({}, {}, "shopItem");
     b->setCheckable(true);
     b->setMinimumHeight(58);
-    // Keys 1-9, then 0 for the tenth plant.
-    const QString key = index < 9 ? QString::number(index + 1) : index == 9 ? "0" : "";
+    // Keys 1-9, then 0 and - for the tenth and eleventh plants.
+    const QString key = index < 9 ? QString::number(index + 1) : index == 9 ? "0" : index == 10 ? "-" : "";
     const bool groundOnly = def.projectile == data::Projectile::Mortar || def.projectile == data::Projectile::Flame;
     const bool attacker = def.projectile != data::Projectile::None && def.projectile != data::Projectile::Aura;
     b->setToolTip(QString("<b>%1</b> %2<br>%3%4").arg(def.name, key.isEmpty() ? "" : "(key " + key + ")", def.desc,
@@ -332,12 +340,38 @@ QPushButton *MainWindow::makeShopItem(int type, int index) {
     g->addWidget(label(def.icon, "shopIcon"), 0, 0);
     g->addWidget(label(COIN + " " + QString::number(def.levels[0].cost), "shopCost"), 0, 1);
     if (!key.isEmpty()) g->addWidget(label(key, "shopKey"), 0, 2, Qt::AlignRight | Qt::AlignTop);
-    g->addWidget(label(def.name, "shopName"), 1, 0, 1, 3);
+    // Plants unlocked on this very map get a NEW badge and a golden border (claude2-0c).
+    const bool fresh = game_.mapIndex > 0 && def.unlockMap == game_.mapIndex && !game_.unlockAll;
+    g->addWidget(label(def.name, "shopName"), 1, 0, 1, fresh ? 2 : 3);
+    if (fresh) {
+        g->addWidget(label("NEW", "shopNew"), 1, 2, Qt::AlignRight | Qt::AlignBottom);
+        b->setProperty("fresh", true);
+        b->setToolTip(b->toolTip() + "<br><b>✨ New plant!</b> " + def.counters.toHtmlEscaped());
+    }
     g->setColumnStretch(1, 1);
     for (QLabel *l : b->findChildren<QLabel *>()) l->setAttribute(Qt::WA_TransparentForMouseEvents);
 
     connect(b, &QPushButton::clicked, this, [this, type] { toggleShop(type); });
     return b;
+}
+
+// Shows only the plants unlocked on the current map: older unlocks first, so their keys stay
+// the same from map to map, and each map's new plants join at the end.
+void MainWindow::rebuildShop() {
+    shopMap_ = game_.mapIndex;
+    shopUnlockAll_ = game_.unlockAll;
+    for (QPushButton *b : shopItems_) b->deleteLater();
+    shopItems_.clear();
+    shopOrder_.clear();
+    for (int i = 0; i < int(data::TOWERS.size()); i++)
+        if (game_.isUnlocked(i)) shopOrder_.push_back(i);
+    std::stable_sort(shopOrder_.begin(), shopOrder_.end(),
+                     [](int a, int b) { return data::TOWERS[a].unlockMap < data::TOWERS[b].unlockMap; });
+    for (int i = 0; i < int(shopOrder_.size()); i++) {
+        QPushButton *item = makeShopItem(shopOrder_[i], i);
+        shopItems_.push_back(item);
+        shopGrid_->addWidget(item, i / 2, i % 2);
+    }
 }
 
 QWidget *MainWindow::buildSide() {
@@ -349,14 +383,9 @@ QWidget *MainWindow::buildSide() {
     v->setSpacing(12);
 
     v->addWidget(label("Plants", "sideTitle"));
-    auto *shop = new QGridLayout;
-    shop->setSpacing(8);
-    for (int i = 0; i < int(data::TOWERS.size()); i++) {
-        QPushButton *item = makeShopItem(i, i);
-        shopItems_.push_back(item);
-        shop->addWidget(item, i / 2, i % 2);
-    }
-    v->addLayout(shop);
+    shopGrid_ = new QGridLayout;   // filled by rebuildShop() on the first syncUi
+    shopGrid_->setSpacing(8);
+    v->addLayout(shopGrid_);
 
     // Tower panel (shown while a planted tower is selected).
     panel_ = new QFrame;
@@ -415,6 +444,7 @@ QWidget *MainWindow::buildSide() {
     connect(tpUpgrade_, &QPushButton::clicked, this, [this] {
         Tower *t = game_.getTower(board_->view.selectedId);
         if (!t || game_.isOver()) return;
+        if (upgradeAllInGroup()) return;   // group mode (double-click)
         int cost = game_.upgradeCost(*t);
         if (cost < 0) { fail("Already at max level"); return; }
         if (game_.coins < cost) { fail("Not enough coins"); return; }
@@ -494,14 +524,15 @@ QWidget *MainWindow::buildOverlay(QLabel *&title, QLabel *&text, QPushButton *&b
 
 void MainWindow::resizeEvent(QResizeEvent *e) {
     QMainWindow::resizeEvent(e);
-    for (QWidget *o : {intro_, end_, next_, bugCard_})
+    for (QWidget *o : {intro_, end_, next_, bugCard_, mapSelect_})
         if (o) o->setGeometry(centralWidget()->rect());
 }
 
 // ---------- loop ----------
 
 bool MainWindow::overlayOpen() const {
-    return intro_->isVisible() || end_->isVisible() || next_->isVisible() || bugCard_->isVisible();
+    return intro_->isVisible() || end_->isVisible() || next_->isVisible() || bugCard_->isVisible() ||
+           (mapSelect_ && mapSelect_->isVisible());
 }
 
 // Bugs that appear on this map's waves but on no earlier map get introduced.
@@ -530,10 +561,29 @@ void MainWindow::showNewBugs() {
         if (!d.desc.isEmpty()) line += "<br>" + d.desc.toHtmlEscaped();
         lines << line;
     }
-    if (lines.isEmpty()) return;
-    bugCardTitle_->setText(lines.size() == 1 ? "New bug!" : "New bugs!");
+    // ...and the plants unlocked on this map, each with the bug it counters (claude2-0c).
+    QStringList plants;
+    for (const data::TowerDef &def : data::TOWERS) {
+        if (def.unlockMap != m) continue;
+        QString line = QString("%1  <b>%2</b>").arg(def.icon, def.name);
+        if (!def.counters.isEmpty()) line += ": " + def.counters.toHtmlEscaped();
+        plants << line;
+    }
+    if (lines.isEmpty() && plants.isEmpty()) return;
+    const QString bugsWord = lines.size() == 1 ? "New bug" : "New bugs";
+    if (plants.isEmpty())
+        bugCardTitle_->setText(bugsWord + "!");
+    else if (lines.isEmpty())
+        bugCardTitle_->setText(plants.size() == 1 ? "New plant!" : "New plants!");
+    else
+        bugCardTitle_->setText(QString("%1… and new %2 to stop them!")
+                                   .arg(bugsWord, plants.size() == 1 ? "plant" : "plants"));
+    QString html = lines.join("<br><br>");
+    if (!plants.isEmpty())
+        html += QString("%1<span style=\"color:#2f8a3a; font-weight:800;\">🌱 Unlocked in your shop:</span><br>%2")
+                    .arg(lines.isEmpty() ? "" : "<br><br>", plants.join("<br>"));
     bugCardText_->setTextFormat(Qt::RichText);
-    bugCardText_->setText(lines.join("<br><br>"));
+    bugCardText_->setText(html);
     bugCard_->show();
     bugCard_->raise();
     bugCardBtn_->setFocus();
@@ -628,11 +678,14 @@ void MainWindow::syncUi() {
     setProp(lives_, "low", game_.lives <= 5);
 
     // Shop
+    if (shopMap_ != game_.mapIndex || shopUnlockAll_ != game_.unlockAll) rebuildShop();
+    if (view.placing >= 0 && !game_.isUnlocked(view.placing)) view.placing = -1;
     for (int i = 0; i < int(shopItems_.size()); i++) {
         QPushButton *b = shopItems_[i];
-        bool disabled = over || game_.coins < data::TOWERS[i].levels[0].cost;
+        const int type = shopOrder_[i];
+        bool disabled = over || game_.coins < data::TOWERS[type].levels[0].cost;
         if (b->isEnabled() == disabled) b->setEnabled(!disabled);
-        bool selected = view.placing == i;
+        bool selected = view.placing == type;
         if (b->isChecked() != selected) b->setChecked(selected);
     }
     board_->setCursor(view.placing >= 0 || view.aimingId >= 0 ? Qt::CrossCursor : Qt::ArrowCursor);
@@ -658,8 +711,10 @@ void MainWindow::syncUi() {
                                  : view.aimingId == t->id ? QStringLiteral("🎯 Pick a spot… (Esc)")
                                                            : QStringLiteral("🎯 Set fire point (T)"));
         tpAim_->setEnabled(!over);
+        syncFocusPanel(*t, over);
     } else {
         panelKey_.clear();
+        view.group.clear();
     }
 
     // Start wave button
@@ -693,7 +748,8 @@ void MainWindow::syncUi() {
 }
 
 void MainWindow::fillPanel(const Tower &t) {
-    QString key = QString("%1:%2:%3:%4").arg(t.id).arg(t.type).arg(t.level).arg(t.hasFirePoint);
+    QString key = QString("%1:%2:%3:%4:%5:%6").arg(t.id).arg(t.type).arg(t.level).arg(t.hasFirePoint)
+                      .arg(board_->view.group.size()).arg(t.focusId >= 0);
     if (key == panelKey_) return;
     panelKey_ = key;
     const data::TowerDef &def = data::TOWERS[t.type];
@@ -747,7 +803,7 @@ void MainWindow::fail(const QString &msg) {
 
 void MainWindow::toggleShop(int type) {
     View &view = board_->view;
-    if (overlayOpen() || game_.isOver()) return;
+    if (overlayOpen() || game_.isOver() || !game_.isUnlocked(type)) return;
     if (view.placing == type) {
         view.placing = -1;
         sfx("click");
@@ -784,8 +840,10 @@ void MainWindow::onClick(int col, int row) {
         onHover(col, row);
         return;
     }
+    if (tryFocusClick()) return;   // a bug was clicked with plants selected
     Tower *t = game_.towerAt(col, row);
     view.selectedId = t ? t->id : -1;
+    view.group.clear();   // a single click selects just one plant
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *e) {
@@ -798,7 +856,7 @@ void MainWindow::keyPressEvent(QKeyEvent *e) {
     case Qt::Key_Escape:
         if (view.aimingId >= 0) view.aimingId = -1;
         else if (view.placing >= 0) view.placing = -1;
-        else view.selectedId = -1;
+        else if (!cancelFocusOnSelection()) { view.selectedId = -1; view.group.clear(); }
         return;
     case Qt::Key_Space:
         if (!e->isAutoRepeat()) { sfx("click"); setUserPaused(!userPaused_); }
@@ -819,9 +877,10 @@ void MainWindow::keyPressEvent(QKeyEvent *e) {
     default:
         break;
     }
-    const int n = e->key() == Qt::Key_0 ? 9 : e->key() - Qt::Key_1;
-    if (!e->isAutoRepeat() && n >= 0 && n < int(data::TOWERS.size())) {
-        toggleShop(n);
+    // Keys follow the shop's visible order (only unlocked plants): 1-9, 0, -.
+    const int n = e->key() == Qt::Key_0 ? 9 : e->key() == Qt::Key_Minus ? 10 : e->key() - Qt::Key_1;
+    if (!e->isAutoRepeat() && n >= 0 && n <= 10) {
+        if (n < int(shopOrder_.size())) toggleShop(shopOrder_[n]);
         return;
     }
     QMainWindow::keyPressEvent(e);
@@ -933,16 +992,100 @@ void MainWindow::goToNextMap() {
     showNewBugs();
 }
 
+// ---------- map select ----------
+
+// A fresh run (full lives, run stats cleared) starting at `map`. Plant unlocks follow
+// mapIndex inside Game, so starting at map N unlocks everything up to N.
+void MainWindow::startRunAt(int map) {
+    sfx("click");
+    runKills_ = runPlanted_ = runShots_ = runCoins_ = 0;
+    runStars_.clear();
+    game_.reset(map);
+    clearView();
+    setUserPaused(false);
+    if (!auto_) setSpeed(1);
+    primed_ = false;
+    intro_->hide();
+    if (mapSelect_) mapSelect_->hide();
+    centralWidget()->setFocus();
+    showNewBugs();
+}
+
+void MainWindow::buildMapSelect() {
+    QLabel *title, *text;
+    QPushButton *back;
+    mapSelect_ = buildOverlay(title, text, back);
+    title->setText("Choose a garden");
+    text->setText("Start a fresh run with full lives at any garden you've reached.");
+    back->setText("Back");
+    back->setDefault(false);
+    connect(back, &QPushButton::clicked, this, [this] {
+        sfx("click");
+        mapSelect_->hide();
+        intro_->show();
+        intro_->raise();
+    });
+    mapList_ = new QWidget;
+    mapList_->setFixedWidth(396);   // card width minus padding (see buildOverlay)
+    if (auto *card = mapSelect_->findChild<QFrame *>("card"))
+        static_cast<QVBoxLayout *>(card->layout())->insertWidget(2, mapList_);   // above Back
+    mapSelect_->hide();
+}
+
+void MainWindow::showMapSelect(int furthest) {
+    // Rebuild the rows so stars are current.
+    delete mapList_->layout();
+    for (QWidget *w : mapList_->findChildren<QWidget *>(Qt::FindDirectChildrenOnly)) delete w;
+    auto *grid = new QGridLayout(mapList_);
+    grid->setContentsMargins(0, 0, 0, 0);
+    grid->setHorizontalSpacing(10);
+    grid->setVerticalSpacing(6);
+    grid->setColumnStretch(0, 1);
+    QSettings settings;
+    furthest = std::clamp(furthest, 0, int(data::MAPS.size()) - 1);
+    static const char *const SEASON_ICON[] = {"🌸", "☀️", "🍂", "❄️"};
+    QPushButton *first = nullptr;
+    for (int i = 0; i <= furthest; i++) {
+        const data::MapDef &m = data::MAPS[i];
+        const int stars = std::clamp(settings.value(QString("stars/%1").arg(i), 0).toInt(), 0, 3);
+        auto *name = new QLabel(QString("%1. %2 %3").arg(i + 1).arg(m.name, SEASON_ICON[int(m.season)]));
+        name->setObjectName("mapRowName");
+        name->setStyleSheet("font-size: 14px; font-weight: 600;");
+        auto *starLabel = new QLabel(starsText(stars));
+        starLabel->setStyleSheet(QString("font-size: 15px; color: %1;").arg(stars > 0 ? "#f2b705" : "#9a9a9a"));
+        auto *play = button("Play");
+        play->setMinimumWidth(70);
+        play->setFocusPolicy(Qt::StrongFocus);
+        connect(play, &QPushButton::clicked, this, [this, i] { startRunAt(i); });
+        grid->addWidget(name, i, 0);
+        grid->addWidget(starLabel, i, 1);
+        grid->addWidget(play, i, 2);
+        if (!first) first = play;
+    }
+    intro_->hide();
+    mapSelect_->setGeometry(centralWidget()->rect());
+    mapSelect_->show();
+    mapSelect_->raise();
+    if (first) first->setFocus();
+}
+
 // ---------- screenshot scenes ----------
 
 bool MainWindow::setupScene(const QString &scene_) {
     if (scene_ == "intro") return true;
-    // A trailing digit picks the map: "bugs3" = the bugs scene on map 3.
+    // Trailing digits pick the map: "bugs3" = the bugs scene on map 3, "play10" = map 10.
     QString scene = scene_;
     int targetMap = 0;
-    if (!scene.isEmpty() && scene.back().isDigit()) {
-        targetMap = std::clamp(scene.back().digitValue() - 1, 0, game_.totalMaps - 1);
-        scene.chop(1);
+    int digits = 0;
+    while (digits < scene.size() && scene[scene.size() - 1 - digits].isDigit()) digits++;
+    if (digits > 0) {
+        targetMap = std::clamp(scene.right(digits).toInt() - 1, 0, game_.totalMaps - 1);
+        scene.chop(digits);
+    }
+    if (scene == "mapselect") {   // the map select card, listing every map
+        intro_->hide();
+        showMapSelect(game_.totalMaps - 1);
+        return true;
     }
     const QStringList known = {"play", "placing", "mapclear", "win", "lose", "night", "celebrate", "bugs",
                                "aim", "newbugs"};
@@ -973,9 +1116,11 @@ bool MainWindow::setupScene(const QString &scene_) {
         return -1;
     };
     const int selected = plant("sprout", 1, 2, 2);
-    plant("frost", 3, 3, 1);
+    const int frost = plant("frost", 3, 3, 1);
     plant("mortar", 4, 4, 0);
-    const int cactus = plant("cactus", 8, 4, 2);
+    // Locked plants are skipped (placeTower refuses them), so early maps show fewer.
+    int cactus = plant("cactus", 8, 4, 2);
+    if (cactus < 0) cactus = frost;   // aim scene before the cactus unlocks: the fern aims instead
     if (scene == "aim") game_.setFirePoint(selected, 2 * 64 + 32, 4 * 64 + 32);   // sprout ambush
     plant("mushroom", 3, 5, 1);
     plant("chili", 5, 5, 2);
@@ -997,7 +1142,7 @@ bool MainWindow::setupScene(const QString &scene_) {
         board_->view.selectedId = selected;
         board_->showToast(QString("Wave %1 cleared! +40 %2  ·  Sunflowers +28 %2").arg(game_.wave - 1).arg(COIN));
     } else if (scene == "placing") {
-        board_->view.placing = 4;   // mushroom
+        board_->view.placing = game_.isUnlocked(4) ? 4 : 1;   // mushroom, or frost before it unlocks
         onHover(7, 4);
     } else if (scene == "mapclear") {
         showMapCleared();

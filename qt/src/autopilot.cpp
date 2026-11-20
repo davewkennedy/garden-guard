@@ -44,8 +44,9 @@ Autopilot::Autopilot(Game &game) : g_(game) {
                            "rose", "clover", "corn", "corn", "frost", "sprout"})
         plan_.push_back(typeOf(id));
     // Maps with flyers: lead with plants that can hit the air (mortars and chilis can't).
-    for (const char *id : {"sprout", "corn", "sprout", "frost", "corn", "mushroom", "mortar",
-                           "rose", "cactus", "corn", "clover", "chili", "mortar", "rose",
+    // Grape vines (claude2-0c) ground flyers on the lanes so the splash plants can join in.
+    for (const char *id : {"sprout", "corn", "grape", "sprout", "frost", "corn", "mushroom", "mortar",
+                           "rose", "cactus", "corn", "grape", "clover", "chili", "mortar", "rose",
                            "cactus", "mushroom", "clover", "frost", "chili", "sprout"})
         airPlan_.push_back(typeOf(id));
 }
@@ -70,6 +71,30 @@ double Autopilot::tileScore(int type, int col, int row) const {
             if (attacks(t.type) && dc * dc + dr * dr <= r2) n++;
         }
         return n > 0 ? n : -1;
+    }
+    if (def.projectile == data::Projectile::Vine) {
+        // Grape vine: anti-air only, so just sky-lane coverage (every half tile), with a bonus
+        // where a mortar or chili already covers the lane: they can hit what the vine grounds.
+        double score = 0;
+        for (const auto &lane : g_.map().skyLanes)
+            for (size_t i = 0; i + 1 < lane.size(); i++) {
+                double ax = lane[i][0], ay = lane[i][1], bx = lane[i + 1][0], by = lane[i + 1][1];
+                int steps = std::max(1, int(std::hypot(bx - ax, by - ay) * 2));
+                for (int s = 0; s < steps; s++) {
+                    double x = ax + (bx - ax) * s / steps, y = ay + (by - ay) * s / steps;
+                    double dc = x - col, dr = y - row;
+                    if (dc * dc + dr * dr > r2) continue;
+                    score += 1.0;
+                    for (const Tower &t : g_.towers) {
+                        const auto p = data::TOWERS[t.type].projectile;
+                        if (p != data::Projectile::Mortar && p != data::Projectile::Flame) continue;
+                        const double tr = data::TOWERS[t.type].levels[t.level].range;
+                        const double tc = x - t.col, trw = y - t.row;
+                        if (tc * tc + trw * trw <= tr * tr) { score += 0.5; break; }
+                    }
+                }
+            }
+        return score > 0 ? score : -1;
     }
     // Attackers: how much path they cover, with a bonus for path near the
     // entrance (bugs spend longer in range of plants they meet early).
@@ -99,7 +124,14 @@ double Autopilot::tileScore(int type, int col, int row) const {
 }
 
 bool Autopilot::placeNext() {
-    const auto &plan = g_.map().skyLanes.empty() || std::getenv("AUTOPILOT_PLAN") ? plan_ : airPlan_;
+    const bool noLanes = g_.map().skyLanes.empty();
+    const auto &fullPlan = noLanes || std::getenv("AUTOPILOT_PLAN") ? plan_ : airPlan_;
+    // Only plants unlocked on this map (claude2-0c); vines need a sky lane to be any use.
+    std::vector<int> plan;
+    for (int t : fullPlan)
+        if (g_.isUnlocked(t) && !(noLanes && data::TOWERS[t].projectile == data::Projectile::Vine))
+            plan.push_back(t);
+    if (plan.empty()) return false;
     const int type = plan[g_.towers.size() % plan.size()];
     if (g_.coins < data::TOWERS[type].levels[0].cost) return false;
     int bestCol = -1, bestRow = -1;

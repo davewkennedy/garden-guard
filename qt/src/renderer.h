@@ -6,7 +6,9 @@
 #include <QHash>
 #include <QPixmap>
 #include <QString>
+#include <algorithm>
 #include <optional>
+#include <vector>
 
 class Game;
 class QPainter;
@@ -18,6 +20,8 @@ struct View {
     int placing = -1;      // tower type being placed, -1 if none
     int selectedId = -1;   // selected tower id, -1 if none
     int aimingId = -1;     // tower whose fire point is being chosen, -1 if none
+    std::vector<int> group;   // multi-select (double-click): all selected tower ids
+    bool inGroup(int id) const { return std::find(group.begin(), group.end(), id) != group.end(); }
 };
 
 class Renderer {
@@ -45,6 +49,7 @@ private:
     void drawEffects(QPainter &p, const Game &g);
     void drawBossBar(QPainter &p, const Game &g);   // big HP bar while a boss is alive
     void drawFireflies(QPainter &p, const Game &g);
+    void drawWeather(QPainter &p, const Game &g);   // season snow / leaves / petals
     void drawFirePoints(QPainter &p, const Game &g, const View &view);
     void drawSkyLanes(QPainter &g, const Game &game);   // into the background
 

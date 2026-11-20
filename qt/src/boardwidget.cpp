@@ -164,9 +164,18 @@ void BoardWidget::mousePressEvent(QMouseEvent *e) {
     if (e->button() != Qt::LeftButton) return;
     int col, row;
     if (tileAt(e->position(), col, row)) {
+        const QRectF r = boardRect();
+        emit pointClicked((e->position().x() - r.left()) * game_->W / r.width(),
+                          (e->position().y() - r.top()) * game_->H / r.height());
         emit tileHovered(col, row);
         emit tileClicked(col, row);
     }
+}
+
+void BoardWidget::mouseDoubleClickEvent(QMouseEvent *e) {
+    if (e->button() != Qt::LeftButton) return;
+    int col, row;
+    if (tileAt(e->position(), col, row)) emit tileDoubleClicked(col, row);
 }
 
 void BoardWidget::leaveEvent(QEvent *) {

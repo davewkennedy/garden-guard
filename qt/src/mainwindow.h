@@ -47,6 +47,15 @@ private:
     void onHover(int col, int row);
     void onClick(int col, int row);
     bool isValid(int col, int row) const;
+    // Focus fire and multi-select (focusfire.cpp).
+    void onDoubleClick(int col, int row);
+    bool tryFocusClick();                   // a bug was clicked with plants selected
+    void focusOn(int enemyId);
+    bool cancelFocusOnSelection();          // Esc: true if a focus was cancelled
+    bool upgradeAllInGroup();               // true if group mode handled the click
+    void syncFocusPanel(const Tower &t, bool over);
+    std::vector<int> selection() const;     // the group, or just the selected plant
+    QPointF lastClick_;                     // logical board px of the last click
     void fail(const QString &msg);
     void sfx(const QString &name) { audio_.play(name); }
 
@@ -80,7 +89,14 @@ private:
     bool overlayTiming_ = false;
 
     // Side panel
+    // Shop (claude2-0c): only unlocked plants are shown; shopItems_[i] shows type shopOrder_[i]
+    // and has key i (1-9, 0, -). Rebuilt by syncUi whenever the map (and so the unlocks) changes.
     std::vector<QPushButton *> shopItems_;
+    std::vector<int> shopOrder_;
+    class QGridLayout *shopGrid_ = nullptr;
+    int shopMap_ = -1;
+    bool shopUnlockAll_ = false;
+    void rebuildShop();
     QFrame *panel_ = nullptr;
     QLabel *tpIcon_ = nullptr, *tpName_ = nullptr, *tpLevel_ = nullptr;
     QFormLayout *tpStats_ = nullptr;
@@ -102,6 +118,12 @@ private:
     QLabel *bugCardTitle_ = nullptr, *bugCardText_ = nullptr;
     QPushButton *bugCardBtn_ = nullptr;
     void showNewBugs();   // "New bugs!" card when a map introduces bug types
+    // Map select (from the intro card): one row per reached map, each with its stars and Play.
+    QWidget *mapSelect_ = nullptr;
+    QWidget *mapList_ = nullptr;   // rows inside the map select card (rebuilt on open)
+    void buildMapSelect();
+    void showMapSelect(int furthest);   // list maps 0..furthest
+    void startRunAt(int map);           // fresh run (full lives) starting at `map`
     QLabel *endTitle_ = nullptr, *endText_ = nullptr;
     QLabel *nextTitle_ = nullptr, *nextText_ = nullptr;
     QPushButton *nextBtn_ = nullptr;

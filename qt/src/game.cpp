@@ -27,6 +27,7 @@ double effectTtl(EffectKind k) {
     case EffectKind::Goo: return 0.5;
     case EffectKind::BossDust: return 1.1;
     case EffectKind::FlyerFall: return 0.5;
+    case EffectKind::Lasso: return 0.45;
     }
     return 0.5;
 }
@@ -182,7 +183,7 @@ Tower *Game::getTower(int id) {
 }
 
 Tower *Game::placeTower(int type, int col, int row) {
-    if (type < 0 || type >= int(data::TOWERS.size()) || isOver() || !canPlace(col, row)) return nullptr;
+    if (!isUnlocked(type) || isOver() || !canPlace(col, row)) return nullptr;
     int cost = data::TOWERS[type].levels[0].cost;
     if (coins < cost) return nullptr;
     coins -= cost;
@@ -247,8 +248,15 @@ void Game::spawnEnemy(data::EnemyType type, double hpMult) {
     e.id = nextId_++;
     e.type = type;
     // Flyers take turns across the map's sky lanes; with no lanes they walk the path.
-    if (def.flying && !skyLanes.empty()) e.lane = nextLane_++ % int(skyLanes.size());
+    if (def.flying && !def.wild && !skyLanes.empty()) e.lane = nextLane_++ % int(skyLanes.size());
     placeBug(e);
+    if (def.wild) {
+        e.spawnTime = time;
+        e.heading = std::atan2(leakY_ - e.y, leakX_ - e.x);
+        e.startDist = std::hypot(leakX_ - e.x, leakY_ - e.y);
+        emit bugSound(QStringLiteral("bug_screech"));
+        emit wildcard(e.id);
+    }
     if (def.boss) {
         // Boss entrance: a dust burst at the nest and a low rumble.
         addEffect(EffectKind::BossDust, std::max(e.x, TILE * 0.5), e.y, 46);
@@ -281,6 +289,76 @@ void Game::flushPendingBugs() {
         enemies.push_back(e);
     }
     pendingBugs_.clear();
+}
+
+// Wild bat: smooth wander (sum of sines seeded by id, so runs are repeatable) blended with a
+// pull toward the house that grows to full by 18 s; edge avoidance keeps it on the board.
+// Returns true when it reached the house.
+bool Game::steerWildBat(Enemy &e, double dt, double mult) {
+    const data::EnemyDef &def = data::ENEMIES[e.type];
+    const double age = time - e.spawnTime;
+    double hx = leakX_ - e.x, hy = leakY_ - e.y;
+    if (std::hypot(hx, hy) < 0.6 * TILE) return true;
+    const double home = std::atan2(hy, hx);
+
+    double w = std::clamp(age / 18.0, 0.0, 1.0);
+    w *= w;
+    if (e.grounded(time) || age > 18) w = 1;   // a lassoed bat stops wandering
+    const unsigned h = unsigned(e.id) * 2654435761u;
+    const double f1 = 0.25 + (h & 0xff) / 255.0 * 0.2, f2 = 0.7 + ((h >> 8) & 0xff) / 255.0 * 0.4;
+    const double p1 = ((h >> 16) & 0xff) / 255.0 * 6.2832, p2 = ((h >> 24) & 0xff) / 255.0 * 6.2832;
+    const double wander = home + 1.7 * std::sin(age * f1 * 6.2832 + p1) + 0.8 * std::sin(age * f2 * 6.2832 + p2);
+    double dx = (1 - w) * std::cos(wander) + w * std::cos(home);
+    double dy = (1 - w) * std::sin(wander) + w * std::sin(home);
+    // Edge avoidance (fades out as the house pull takes over).
+    auto near = [](double d) { return std::clamp(1 - d / TILE, 0.0, 1.0); };
+    const double push = 1.6 * (1 - w);
+    dx += push * (near(e.x) - near(W - e.x));
+    dy += push * (near(e.y) - near(H - e.y));
+
+    const double diff = std::remainder(std::atan2(dy, dx) - e.heading, 2 * M_PI);
+    const double maxTurn = 2.6 * dt;   // capped turn rate: smooth arcs, no jitter
+    e.heading += std::clamp(diff, -maxTurn, maxTurn);
+    const double speed = def.speed * TILE * mult * (age > 30 ? 1.6 : 1.0);   // late: hurry home
+    e.x += std::cos(e.heading) * speed * dt;
+    e.y += std::sin(e.heading) * speed * dt;
+    e.x = std::min(e.x, W - TILE * 0.3);
+    e.y = std::clamp(e.y, TILE * 0.3, H - TILE * 0.3);
+    e.angle = e.heading;
+    hx = leakX_ - e.x; hy = leakY_ - e.y;
+    const double hd = std::hypot(hx, hy);
+    e.dist = std::max(0.0, e.startDist - hd);   // "first" targeting: closer to home = further along
+
+    e.trailTimer -= dt;
+    if (e.trailTimer <= 0) {
+        e.trailTimer = 0.08;
+        e.trail.emplace_back(e.x, e.y);
+        if (e.trail.size() > 10) e.trail.erase(e.trail.begin());
+    }
+    return hd < 0.6 * TILE;
+}
+
+// Grape vine: lasso the leading ungrounded flyer in range and pull it down.
+void Game::fireVine(Tower &t, double dt) {
+    const data::TowerLevel &lv = data::TOWERS[t.type].levels[t.level];
+    t.cooldown = std::max(0.0, t.cooldown - dt * rateBoost(t));
+    const double r2 = std::pow(lv.range * TILE, 2);
+    Enemy *best = nullptr;
+    for (auto &e : enemies) {
+        if (!e.alive || !data::ENEMIES[e.type].flying || e.grounded(time)) continue;
+        double dx = e.x - t.x, dy = e.y - t.y;
+        if (dx * dx + dy * dy <= r2 && (!best || e.dist > best->dist)) best = &e;
+    }
+    if (!best) return;
+    t.angle = std::atan2(best->y - t.y, best->x - t.x);
+    if (t.cooldown > 0) return;
+    t.shotTime = time;
+    t.cooldown = 1 / lv.rate;
+    best->groundedUntil = time + lv.groundTime;
+    best->vineBy = t.id;
+    addEffect(EffectKind::Lasso, best->x, best->y, 20);
+    emit shot(t.type);
+    damageEnemy(*best, damageOf(t));
 }
 
 // Position from dist along the bug's sky lane, or the ground path.
@@ -404,9 +482,16 @@ void Game::updateEnemies(double dt) {
         double mult = 1;
         if (time < e.slowUntil) mult = 1 - e.slowFactor;
         else e.slowFactor = 0;
-        e.dist += def.speed * TILE * mult * dt;
+        if (e.grounded(time)) mult *= 0.7;   // held down by a grape vine
+        bool arrived;
+        if (def.wild) {
+            arrived = steerWildBat(e, dt, mult);
+        } else {
+            e.dist += def.speed * TILE * mult * dt;
+            arrived = e.dist >= routeLength(e);
+        }
 
-        if (e.dist >= routeLength(e)) {
+        if (arrived) {
             e.alive = false;
             if (phase == Phase::Lost) continue;
             lives -= def.lives;
@@ -419,7 +504,7 @@ void Game::updateEnemies(double dt) {
             }
             continue;
         }
-        placeBug(e);
+        if (!def.wild) placeBug(e);
     }
     removeIf(enemies, [](const Enemy &e) { return !e.alive; });
 }
@@ -497,10 +582,13 @@ void Game::applySlow(Enemy &e, double slow, double slowTime) {
 
 void Game::updateTowers(double dt) {
     for (auto &t : towers) {
+        // Focus fire ends when its bug dies, escapes or splits: back to normal targeting.
+        if (t.focusId >= 0 && !findEnemy(t.focusId)) t.focusId = -1;
         if (t.stunned(time)) continue;   // gooed by a scorpion
         const data::TowerDef &def = data::TOWERS[t.type];
         if (def.projectile == data::Projectile::None || def.projectile == data::Projectile::Aura)
             continue;   // sunflowers and clovers don't attack
+        if (def.projectile == data::Projectile::Vine) { fireVine(t, dt); continue; }
         const data::TowerLevel &lv = def.levels[t.level];
         t.cooldown = std::max(0.0, t.cooldown - dt * rateBoost(t));
 
@@ -521,7 +609,7 @@ void Game::updateTowers(double dt) {
 
 // Placeholder until flyers land (claude2-63 replaces this): every plant can hit every bug.
 bool Game::canHit(const Tower &t, const Enemy &e) const {
-    if (!data::ENEMIES[e.type].flying) return true;
+    if (!data::ENEMIES[e.type].flying || e.grounded(time)) return true;   // lassoed = ground
     const auto k = data::TOWERS[t.type].projectile;
     return k != data::Projectile::Mortar && k != data::Projectile::Flame;   // ground attacks
 }
@@ -539,8 +627,16 @@ bool Game::eligible(const Tower &t, const Enemy &e, double rangePx) const {
     return true;
 }
 
-// Default: "first" (the bug furthest along). With a fire point: the bug closest to it.
+// Focus fire first (the player's chosen bug, if in range: it even pulls an ambushing
+// plant off its fire point). Otherwise "first" (the bug furthest along), or with a
+// fire point, the bug closest to it.
 const Enemy *Game::pickTarget(const Tower &t, double rangePx) const {
+    if (t.focusId >= 0) {
+        for (const auto &e : enemies) {
+            if (e.id != t.focusId || !e.alive || !canHit(t, e)) continue;
+            if (std::hypot(e.x - t.x, e.y - t.y) <= rangePx) return &e;
+        }
+    }
     const Enemy *best = nullptr;
     double bestScore = 0;
     for (const auto &e : enemies) {
@@ -564,9 +660,41 @@ bool Game::setFirePoint(int towerId, double x, double y) {
 }
 
 // Ambush bonus: a plant committed to a fire point hits harder there.
+// Focus fire suspends the ambush, so no bonus while focusing.
 int Game::damageOf(const Tower &t) const {
     const int base = data::TOWERS[t.type].levels[t.level].damage;
-    return t.hasFirePoint ? int(std::lround(base * AMBUSH_BONUS)) : base;
+    return t.hasFirePoint && t.focusId < 0 ? int(std::lround(base * AMBUSH_BONUS)) : base;
+}
+
+// ---------- Focus fire ----------
+
+bool Game::focusFire(const std::vector<int> &towerIds, int enemyId) {
+    if (isOver() || !findEnemy(enemyId)) return false;
+    int n = 0;
+    for (int id : towerIds) {
+        Tower *t = getTower(id);
+        if (!t) continue;
+        const auto k = data::TOWERS[t->type].projectile;
+        if (k == data::Projectile::None || k == data::Projectile::Aura) continue;   // support plants
+        t->focusId = enemyId;
+        n++;
+    }
+    return n > 0;
+}
+
+void Game::clearFocus(int towerId) {
+    if (Tower *t = getTower(towerId)) t->focusId = -1;
+}
+
+int Game::enemyNear(double x, double y, double radius) const {
+    int best = -1;
+    double bestD = radius;
+    for (const auto &e : enemies) {
+        if (!e.alive) continue;
+        double d = std::hypot(e.x - x, e.y - visualY(e) - y);   // where the sprite is drawn
+        if (d <= bestD) { bestD = d; best = e.id; }
+    }
+    return best;
 }
 
 void Game::clearFirePoint(int towerId) {
@@ -731,7 +859,13 @@ bool Game::stepHoming(Shot &p, double dt) {
         p.y = p.toY;
         p.progress = 1;
         // If the target died before impact, the shot fizzles with no damage.
-        if (target && damageEnemy(*target, p.damage)) {
+        // Cactus spikes hit spitters (scorpions) 50% harder, with a bigger spark.
+        double dmg = p.damage;
+        if (target && p.kind == data::Projectile::Spike && data::ENEMIES[target->type].spitEvery > 0) {
+            dmg *= 1.5;
+            addEffect(EffectKind::Hit, target->x, target->y, 20);
+        }
+        if (target && damageEnemy(*target, dmg)) {
             if (p.slow > 0) applySlow(*target, p.slow, p.slowTime);
             if (p.poisonDps > 0) applyPoison(*target, p.poisonDps, p.poisonTime);
         }

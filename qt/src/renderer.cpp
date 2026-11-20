@@ -100,6 +100,53 @@ void rangeCircle(QPainter &p, double x, double y, double r, bool ok) {
     p.drawEllipse(QPointF(x, y), r, r);
 }
 
+// ---------- seasons ----------
+// Flower palettes per season (index by data::Season). Winter has no flowers: snow instead.
+const char *const SPRING_FLOWERS[] = {"#ffffff", "#ffc8dd", "#ff8fb1", "#e7c6ff", "#fff1a8"};
+const char *const SUMMER_FLOWERS[] = {"#ff3b3b", "#ffd21f", "#ff7a00", "#ff4fa3", "#8a5cff"};
+const char *const AUTUMN_FLOWERS[] = {"#e8a33a", "#c94f2a", "#f2c14e", "#9b5de5", "#d9622b"};
+const char *const LEAF_COLORS[] = {"#d9622b", "#e8a33a", "#b5432a", "#c98a2e", "#8f4a22"};
+
+// A small pointed leaf with a center vein, `size` = half its length.
+void drawLeaf(QPainter &g, double x, double y, double size, double rot, const QColor &c) {
+    g.save();
+    g.translate(x, y);
+    g.rotate(deg(rot));
+    QPainterPath leaf(QPointF(-size, 0));
+    leaf.quadTo(QPointF(0, -size * 0.75), QPointF(size, 0));
+    leaf.quadTo(QPointF(0, size * 0.75), QPointF(-size, 0));
+    g.setPen(Qt::NoPen);
+    g.setBrush(c);
+    g.drawPath(leaf);
+    g.setPen(QPen(c.darker(150), 0.7));
+    g.drawLine(QPointF(-size * 0.85, 0), QPointF(size * 0.8, 0));
+    g.restore();
+}
+
+// Soft-edged snow drift.
+void drawSnowPatch(QPainter &g, double x, double y, double rx, double ry) {
+    QRadialGradient s(QPointF(0, 0), rx);
+    s.setColorAt(0, rgba(252, 253, 255, 0.92));
+    s.setColorAt(0.65, rgba(238, 245, 255, 0.75));
+    s.setColorAt(1, rgba(238, 245, 255, 0));
+    g.save();
+    g.translate(x, y);
+    g.scale(1, ry / rx);
+    g.setPen(Qt::NoPen);
+    g.setBrush(s);
+    g.drawEllipse(QPointF(0, 0), rx, rx);
+    g.restore();
+}
+
+// A five-petal blossom (spring trees drop these).
+void drawBlossom(QPainter &g, double x, double y, double r, double rot, const QColor &c) {
+    for (int k = 0; k < 5; k++) {
+        double a = rot + k * TAU / 5;
+        fillCircle(g, x + std::cos(a) * r, y + std::sin(a) * r, r * 0.85, c);
+    }
+    fillCircle(g, x, y, r * 0.55, QColor("#ffe27a"));
+}
+
 }  // namespace
 
 // ---------- scaling & caches ----------
@@ -228,11 +275,31 @@ QPixmap Renderer::buildBackground(const Game &game) {
         g.drawLine(QPointF(x, y), QPointF(x + lean, y - len));
     }
 
+    // Season wash over the grass (under the path, so the path keeps its color).
+    const data::Season season = map.season;
+    Rng srand(map.seed ^ 0x5EA5011u);   // separate stream: seasons don't reshuffle the base layout
+    switch (season) {
+    case data::Season::Spring: break;
+    case data::Season::Summer: g.fillRect(QRectF(0, 0, W, H), rgba(255, 225, 90, 0.07)); break;
+    case data::Season::Autumn: g.fillRect(QRectF(0, 0, W, H), rgba(225, 130, 35, 0.08)); break;
+    case data::Season::Winter: {
+        g.fillRect(QRectF(0, 0, W, H), rgba(215, 228, 245, 0.22));
+        // Frost: pale glints on the grass.
+        for (int i = 0; i < GRID_COLS * GRID_ROWS * 5; i++)
+            fillCircle(g, srand() * W, srand() * H, 0.6 + srand() * 0.9, rgba(255, 255, 255, 0.35 + srand() * 0.3));
+        break;
+    }
+    }
+
     // Dirt path.
     const std::vector<QPointF> &pathPts = game.path;
     QPainterPath route(pathPts[0]);
     for (size_t i = 1; i < pathPts.size(); i++) route.lineTo(pathPts[i]);
     g.setBrush(Qt::NoBrush);
+    if (season == data::Season::Winter) {   // snowbank along the path edges
+        g.setPen(roundPen(rgba(250, 252, 255, 0.75), TILE * 1.0));
+        g.drawPath(route);
+    }
     for (auto [width, color] : {std::pair{0.92, rgba(50, 35, 15, 0.22)},
                                 std::pair{0.84, QColor("#93653b")},
                                 std::pair{0.74, QColor("#c99a62")},
@@ -278,11 +345,17 @@ QPixmap Renderer::buildBackground(const Game &game) {
             double cy = r * TILE + 12 + rand() * (TILE - 24);
             if (game.isPathTile(c, r)) continue;
 
-            if (roll < 0.17) {   // flowers
+            if (roll < 0.17 && season == data::Season::Winter) {   // snow drift instead of flowers
+                drawSnowPatch(g, cx, cy, TILE * (0.18 + rand() * 0.14), TILE * (0.1 + rand() * 0.06));
+            } else if (roll < 0.17) {   // flowers
+                const char *const *palette = season == data::Season::Spring   ? SPRING_FLOWERS
+                                             : season == data::Season::Summer ? SUMMER_FLOWERS
+                                             : season == data::Season::Autumn ? AUTUMN_FLOWERS
+                                                                              : FLOWER_COLORS;
                 int n = 1 + int(rand() * 3);
                 for (int i = 0; i < n; i++) {
                     double fx = cx + (rand() - 0.5) * 14, fy = cy + (rand() - 0.5) * 14;
-                    QColor color(FLOWER_COLORS[int(rand() * 5)]);
+                    QColor color(palette[int(rand() * 5)]);
                     double rot = rand() * TAU;
                     g.setPen(roundPen(rgba(40, 110, 40, 0.6), 1.2));
                     g.drawLine(QPointF(fx, fy), QPointF(fx, fy + 5));
@@ -307,8 +380,11 @@ QPixmap Renderer::buildBackground(const Game &game) {
                     g.restore();
                     fillCircle(g, px - rx * 0.3, py - rx * 0.25, rx * 0.3, rgba(255, 255, 255, 0.35));
                 }
-            } else if (roll < 0.45) {   // grass tuft
-                g.setPen(roundPen(QColor("#4f9a3b"), 1.6));
+            } else if (roll < 0.45) {   // grass tuft (frosted in winter, golden in autumn)
+                g.setPen(roundPen(QColor(season == data::Season::Winter   ? "#a9c9b4"
+                                         : season == data::Season::Autumn ? "#a58a3a"
+                                                                          : "#4f9a3b"),
+                                  1.6));
                 g.setBrush(Qt::NoBrush);
                 for (int k = 0; k < 5; k++) {
                     double a = -M_PI / 2 + (k - 2) * 0.32 + (rand() - 0.5) * 0.2;
@@ -317,6 +393,39 @@ QPixmap Renderer::buildBackground(const Game &game) {
                     blade.quadTo(cx + std::cos(a) * len * 0.5, cy + 4 + std::sin(a) * len * 0.6,
                                  cx + std::cos(a) * len, cy + 4 + std::sin(a) * len);
                     g.drawPath(blade);
+                }
+            }
+        }
+    }
+
+    // Season scatter: blossoms, fallen leaves or snow drifts (grass only, small and flat so
+    // plants and bugs stay readable on top).
+    if (season != data::Season::Summer) {
+        for (int r = 0; r < GRID_ROWS; r++) {
+            for (int c = 0; c < GRID_COLS; c++) {
+                const double roll = srand();
+                const double cx = c * TILE + TILE * (0.15 + srand() * 0.7);
+                const double cy = r * TILE + TILE * (0.15 + srand() * 0.7);
+                const bool onPath = game.isPathTile(c, r);
+                if (season == data::Season::Spring) {
+                    if (onPath || roll > 0.16) continue;
+                    // A drift of fallen blossom petals.
+                    int n = 3 + int(srand() * 4);
+                    for (int i = 0; i < n; i++)
+                        drawBlossom(g, cx + (srand() - 0.5) * TILE * 0.4, cy + (srand() - 0.5) * TILE * 0.3,
+                                    TILE * 0.03, srand() * TAU,
+                                    srand() < 0.6 ? QColor("#ffc2d6") : QColor("#fff4f8"));
+                } else if (season == data::Season::Autumn) {
+                    // Leaf piles on grass; the odd stray leaf blown onto the path.
+                    if (onPath ? roll > 0.08 : roll > 0.2) continue;
+                    int n = onPath ? 1 : 2 + int(srand() * (roll < 0.12 ? 6 : 2));
+                    for (int i = 0; i < n; i++)
+                        drawLeaf(g, cx + (srand() - 0.5) * TILE * 0.35, cy + (srand() - 0.5) * TILE * 0.3,
+                                 TILE * (0.06 + srand() * 0.03), srand() * TAU,
+                                 QColor(LEAF_COLORS[int(srand() * 5)]));
+                } else {   // winter
+                    if (onPath || roll > 0.22) continue;
+                    drawSnowPatch(g, cx, cy, TILE * (0.22 + srand() * 0.2), TILE * (0.12 + srand() * 0.08));
                 }
             }
         }
@@ -369,7 +478,10 @@ QPixmap Renderer::buildBackground(const Game &game) {
     // Soft vignette.
     QRadialGradient vg = radial(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.68);
     vg.setColorAt(0, rgba(20, 40, 10, 0));
-    vg.setColorAt(1, map.night ? rgba(0, 0, 20, 0.45) : rgba(20, 40, 10, 0.22));
+    vg.setColorAt(1, map.night                          ? rgba(0, 0, 20, 0.45)
+                     : season == data::Season::Winter ? rgba(40, 60, 90, 0.22)
+                     : season == data::Season::Autumn ? rgba(70, 35, 5, 0.24)
+                                                      : rgba(20, 40, 10, 0.22));
     g.fillRect(QRectF(0, 0, W, H), vg);
     g.end();
     return pm;
@@ -394,6 +506,53 @@ void Renderer::drawFireflies(QPainter &p, const Game &g) {
         p.setBrush(glow);
         p.drawEllipse(QPointF(x, y), 9, 9);
     }
+}
+
+// Seasonal weather drifting over the board: snowfall in winter, tumbling leaves in autumn,
+// a few petals in spring. Counts scale with the board; everything is small and translucent
+// so it never hides bugs or plants.
+void Renderer::drawWeather(QPainter &p, const Game &g) {
+    const data::Season season = g.map().season;
+    if (season == data::Season::Summer) return;
+    const double t = g.time;
+    const double area = (W * H) / (960.0 * 640.0);   // 1 on the default 15x10 board
+    p.save();
+    p.setPen(Qt::NoPen);
+    if (season == data::Season::Winter) {
+        const int n = int(60 * area);
+        for (int i = 0; i < n; i++) {
+            double phase = i * 2.39996;
+            double fall = TILE * (0.3 + (i % 5) * 0.08);   // px/s, varied per flake
+            double x = std::fmod(i * 97.0 + TILE * 0.25 * std::sin(t * 0.7 + phase) + t * TILE * 0.1, W);
+            double y = std::fmod(i * 53.0 + t * fall, H + 10) - 5;
+            if (x < 0) x += W;
+            double r = TILE * (0.018 + (i % 3) * 0.009);
+            p.setBrush(rgba(255, 255, 255, 0.5 + 0.12 * (i % 3)));
+            p.drawEllipse(QPointF(x, y), r, r);
+        }
+    } else {
+        const bool autumn = season == data::Season::Autumn;
+        const int n = int((autumn ? 14 : 8) * area);
+        const double pad = TILE * 0.5;
+        p.setOpacity(0.85);
+        for (int i = 0; i < n; i++) {
+            double phase = i * 2.39996;
+            double x = std::fmod(i * 173.0 + t * TILE * (0.3 + (i % 4) * 0.07) +
+                                     TILE * 0.5 * std::sin(t * 0.9 + phase), W + 2 * pad) - pad;
+            double y = std::fmod(i * 71.0 + t * TILE * (0.2 + (i % 3) * 0.06), H + 2 * pad) - pad;
+            if (x < -pad) x += W + 2 * pad;
+            double rot = t * (1.2 + (i % 5) * 0.3) + phase;
+            if (autumn) {
+                drawLeaf(p, x, y, TILE * (0.08 + (i % 3) * 0.015), rot, QColor(LEAF_COLORS[i % 5]));
+            } else {
+                // Petals flutter: squash the ellipse as they spin.
+                double flip = 0.35 + 0.65 * std::abs(std::sin(rot * 1.3));
+                fillEllipse(p, x, y, TILE * 0.05, TILE * 0.032 * flip, rot,
+                            QColor(i % 2 ? "#ffc2d6" : "#fff0f5"));
+            }
+        }
+    }
+    p.restore();
 }
 
 // ---------- layers ----------
@@ -569,6 +728,39 @@ void Renderer::drawEnemies(QPainter &p, const Game &g) {
             p.drawEllipse(QPointF(gx, gy + size * 0.3), size * 0.58, size * 0.24);
         }
 
+        // Wild bat: a faint fading trail of where it has been (drawn at flight height).
+        if (def.wild && e.trail.size() > 1) {
+            for (size_t i = 1; i < e.trail.size(); i++) {
+                double f = double(i) / e.trail.size();
+                p.setPen(roundPen(rgba(190, 120, 255, 0.28 * f), 1 + 3 * f));
+                p.drawLine(QPointF(e.trail[i - 1].x(), e.trail[i - 1].y() - alt),
+                           QPointF(e.trail[i].x(), e.trail[i].y() - alt));
+            }
+        }
+        // Grape vine tether: a wavy vine from the plant down to the lassoed flyer.
+        if (e.grounded(time) && e.vineBy >= 0) {
+            for (const auto &t : g.towers) {
+                if (t.id != e.vineBy) continue;
+                QPainterPath vine(QPointF(t.x, t.y - 6));
+                const double vx = e.x - t.x, vy = e.y - (t.y - 6), len = std::hypot(vx, vy);
+                const double nx = len > 0 ? -vy / len : 0, ny = len > 0 ? vx / len : 0;
+                for (int k = 1; k <= 12; k++) {
+                    double q = k / 12.0, wob = std::sin(q * 3 * M_PI + time * 6) * 4 * (1 - q * 0.5);
+                    vine.lineTo(t.x + vx * q + nx * wob, t.y - 6 + vy * q + ny * wob);
+                }
+                p.setBrush(Qt::NoBrush);
+                p.setPen(roundPen(QColor("#2f6b1f"), 3.5));
+                p.drawPath(vine);
+                p.setPen(roundPen(QColor("#6cbf3a"), 1.8));
+                p.drawPath(vine);
+                fillEllipse(p, t.x + vx * 0.5 + nx * 5, t.y - 6 + vy * 0.5 + ny * 5, 4, 2.2,
+                            std::atan2(vy, vx), QColor("#5fae35"));   // a leaf
+                p.setPen(roundPen(QColor("#2f6b1f"), 2));
+                p.drawEllipse(QPointF(e.x, e.y), size * 0.32, size * 0.16);   // loop around the bug
+                break;
+            }
+        }
+
         p.save();
         // Cricket hop: a quick arc up off the ground (the shadow stays put).
         const double hopK = time - e.hopStart;
@@ -634,6 +826,14 @@ void Renderer::drawEnemies(QPainter &p, const Game &g) {
             p.setOpacity(0.8 * (1 - k / FLASH_TIME));
             const QPixmap &flash = tint(def.icon, size, Qt::white);
             p.drawPixmap(target, flash, flash.rect());
+        }
+        if (def.wild) {
+            // Fairness tell: glowing red eyes.
+            p.setOpacity(1);
+            for (int s = -1; s <= 1; s += 2) {
+                fillCircle(p, s * size * 0.075, -size * 0.13, size * 0.07, rgba(255, 40, 40, 0.35));
+                fillCircle(p, s * size * 0.075, -size * 0.13, size * 0.032, QColor("#ff3b3b"));
+            }
         }
         p.setOpacity(1);
         p.restore();
@@ -774,6 +974,7 @@ void Renderer::drawShots(QPainter &p, const Game &g) {
         case data::Projectile::Flame:   // drawn as an effect, not a projectile
         case data::Projectile::Aura:
         case data::Projectile::None:
+        case data::Projectile::Vine:    // the lasso is drawn as a tether, not a projectile
             break;
         }
     }
@@ -967,6 +1168,16 @@ void Renderer::drawEffects(QPainter &p, const Game &g) {
             break;
         }
 
+        case EffectKind::Lasso: {
+            // Vine lasso: a green loop tightening around the flyer.
+            p.setOpacity(a);
+            p.setBrush(Qt::NoBrush);
+            p.setPen(roundPen(QColor("#5fae35"), 3));
+            const double R = fx.radius * (1.6 - 0.9 * eu);
+            p.drawEllipse(QPointF(fx.x, fx.y), R, R * 0.6);
+            break;
+        }
+
         case EffectKind::FlyerFall: {
             // Flyer shot down: tilts, spins and drops to the ground while shrinking and fading.
             const double drop = fx.radius * u * u + 6 * u;
@@ -1027,13 +1238,13 @@ void Renderer::drawSkyLanes(QPainter &g, const Game &game) {
         g.setBrush(Qt::NoBrush);
         g.setPen(glow);
         g.drawPath(trail);
-        QPen dash = roundPen(rgba(255, 255, 255, 0.55), 2.5);
+        QPen dash = roundPen(game.map().season == data::Season::Winter ? rgba(60, 100, 160, 0.6) : rgba(255, 255, 255, 0.55), 2.5);   // blue on snow
         dash.setDashPattern({3, 3});
         g.setPen(dash);
         g.drawPath(trail);
         // Chevrons every ~1.5 tiles along the lane.
         const double len = trail.length();
-        g.setPen(roundPen(rgba(255, 255, 255, 0.7), 2.2));
+        g.setPen(roundPen(game.map().season == data::Season::Winter ? rgba(50, 90, 150, 0.75) : rgba(255, 255, 255, 0.7), 2.2));
         for (double d = TILE; d < len - TILE * 0.5; d += TILE * 1.5) {
             double pct = trail.percentAtLength(d);
             QPointF at = trail.pointAtPercent(pct);
@@ -1077,6 +1288,38 @@ void Renderer::drawFirePoints(QPainter &p, const Game &g, const View &view) {
         }
         reticle(t.fireX, t.fireY, QColor("#ff5a46"), focus ? 0.95 : 0.5);
     }
+    // Multi-select: a soft ring on every plant in the group.
+    for (const Tower &t : g.towers) {
+        if (!view.inGroup(t.id) || t.id == view.selectedId) continue;
+        strokeCircle(p, t.x, t.y, TILE * 0.34 + 6, rgba(255, 240, 140, 0.35), 6);
+        strokeCircle(p, t.x, t.y, TILE * 0.34 + 6, QColor("#fff1a0"), 2);
+    }
+    // Focus fire: aim lines from each focusing plant and a pulsing marker on the bug.
+    std::vector<int> marked;
+    for (const Tower &t : g.towers) {
+        if (t.focusId < 0) continue;
+        for (const Enemy &e : g.enemies) {
+            if (e.id != t.focusId || !e.alive) continue;
+            const double ey = e.y - g.visualY(e);
+            QPen line(rgba(255, 70, 50, 0.45), 1.5);
+            line.setDashPattern({3, 3});
+            p.setPen(line);
+            p.drawLine(QPointF(t.x, t.y), QPointF(e.x, ey));
+            if (std::find(marked.begin(), marked.end(), e.id) == marked.end()) {
+                marked.push_back(e.id);
+                const double pulse = 1 + 0.15 * std::sin(g.time * 10);
+                const double r = TILE * 0.42 * pulse;
+                p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(rgba(255, 60, 40, 0.95), 2.5));
+                p.drawEllipse(QPointF(e.x, ey), r, r);
+                for (int k = 0; k < 4; k++) {   // corner ticks of a target reticle
+                    double a = k * M_PI / 2 + M_PI / 4;
+                    p.drawLine(QPointF(e.x + std::cos(a) * r * 0.7, ey + std::sin(a) * r * 0.7),
+                               QPointF(e.x + std::cos(a) * r * 1.25, ey + std::sin(a) * r * 1.25));
+                }
+            }
+        }
+    }
     // Choosing a fire point: preview at the hovered tile (green = in range).
     if (view.aimingId >= 0 && view.hover) {
         for (const Tower &t : g.towers) {
@@ -1104,6 +1347,7 @@ void Renderer::draw(QPainter &p, const Game &game, const View &view, double scal
     drawEnemies(p, game);
     drawShots(p, game);
     drawEffects(p, game);
+    drawWeather(p, game);
     drawFireflies(p, game);
     drawBossBar(p, game);
 }

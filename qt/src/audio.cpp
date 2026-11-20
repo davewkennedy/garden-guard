@@ -203,6 +203,12 @@ QHash<QString, std::vector<Part>> recipes() {
     r["boss_rumble"] = {noise(0, F::Lowpass, 160, 1.0, 0.55, 0.15, 1),
                         tone(0, O::Sine, 55, 40, 1.0, 0.35, 0.12),
                         tone(0.05, O::Sine, 82, 60, 0.8, 0.18, 0.1)};
+    // Grape vine lasso: a whippy "thwip".
+    r["shoot_grape"] = {noise(0, F::Highpass, 2500, 0.1, 0.22, 0.003),
+                        tone(0, O::Triangle, 300, 900, 0.1, 0.16, 0.004)};
+    // Wild bat appears: two thin high squeaks.
+    r["bug_screech"] = {tone(0, O::Square, 2600, 3400, 0.07, 0.07, 0.003, F::Bandpass, 3000),
+                        tone(0.1, O::Square, 2800, 3700, 0.09, 0.07, 0.003, F::Bandpass, 3200)};
     // Scorpion spit: a short wet "ptoo" (the splat on landing reuses bug_split).
     r["bug_spit"] = {tone(0, O::Sine, 420, 900, 0.09, 0.22, 0.003),
                      noise(0, F::Bandpass, 1400, 0.08, 0.25, 0.002, 3)};

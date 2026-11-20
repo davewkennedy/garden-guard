@@ -15,7 +15,7 @@ add_executable(garden
     src/renderer.h src/renderer.cpp
     src/boardwidget.h src/boardwidget.cpp
     src/audio.h src/audio.cpp
-    src/mainwindow.h src/mainwindow.cpp
+    src/mainwindow.h src/mainwindow.cpp src/focusfire.cpp
     src/autopilot.h src/autopilot.cpp
 )
 target_link_libraries(garden PRIVATE Qt6::Widgets Qt6::Multimedia)

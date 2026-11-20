@@ -2,8 +2,9 @@
 
 Maintained by claude2-f4 (tech lead). Read-only for everyone else.
 
-## Current state
-**Not started yet.** Waiting for the user's "go" and timebox.
+## Current state (updated 16:56)
+**Session A running.** Started 16:52:54, timebox 50 min, wrap-up from ~17:36, done by ~17:43.
+All 4 helpers are building their features in parallel. claude2-f4 is on focus fire.
 
 - Project: `~/projects/garden-plusplus` (copy of Garden Guard+ made 16:48; `~/projects/garden-plus` is the untouched rollback).
 - Snapshots will be saved to `~/projects/snapshots/` at each milestone.
@@ -19,7 +20,9 @@ Maintained by claude2-f4 (tech lead). Read-only for everyone else.
 | claude2-c7 | Messenger | Answers the user's status questions (no development). Reads these notes; anything else goes ONLY through claude2-f4, never to dev agents directly | |
 
 ## Milestones
-_(none yet)_
+- 16:52 Start. Snapshot `garden-plusplus-0-start.tar`.
+- 16:56 **Engine refactor landed** (claude2-f4): each map has its own grid size (MapDef cols/rows). Tiles stay 64 logical px and the board scales to fit, so bigger grids look like smaller tiles. Build + all tests pass. Snapshot `garden-plusplus-1-refactor.tar`. All helpers released to edit.
+- Decisions: maps 4/5 swapped (4 = Harvest Hollow, 5 = Moonlit Garden, the first wild bats). Plant unlocks are stored on the plants (TowerDef unlockMap). The 11th plant's key is '-'.
 
 ## Problems / blockers
 _(none)_

@@ -29,11 +29,14 @@ signals:
     void tileHovered(int col, int row);
     void hoverLeft();
     void tileClicked(int col, int row);
+    void tileDoubleClicked(int col, int row);
+    void pointClicked(double x, double y);   // logical board px, sent just before tileClicked
 
 protected:
     void paintEvent(QPaintEvent *) override;
     void mouseMoveEvent(QMouseEvent *e) override;
     void mousePressEvent(QMouseEvent *e) override;
+    void mouseDoubleClickEvent(QMouseEvent *e) override;
     void leaveEvent(QEvent *) override;
 
 private:

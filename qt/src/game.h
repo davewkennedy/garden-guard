@@ -29,6 +29,16 @@ struct Enemy {
     double hopStart = -1;     // state time of the last hop, -1 if never (renderer arcs it)
     double healTime = -1;     // state time this bug was last healed, -1 if never
     int lane = -1;            // flyers: index into the map's sky lanes (-1 = walks the path)
+    // Wild bats: free flight.
+    double heading = 0;       // radians
+    double spawnTime = 0;
+    double startDist = 0;     // px to the house at spawn (dist = progress toward it)
+    double trailTimer = 0;
+    std::vector<QPointF> trail;   // recent positions (renderer draws a fading trail)
+    // Grape vine: a lassoed flyer is grounded (every plant can hit it, it slows down).
+    double groundedUntil = 0;
+    int vineBy = -1;          // tower id holding the vine
+    bool grounded(double now) const { return now < groundedUntil; }
 
     bool slowed(double now) const { return now < slowUntil && slowFactor > 0; }
     bool poisoned(double now) const { return now < poisonUntil && poisonDps > 0; }
@@ -46,6 +56,7 @@ struct Tower {
     // Optional fire point (ambush): only shoot bugs near this spot, aiming there while idle.
     bool hasFirePoint = false;
     double fireX = 0, fireY = 0;   // px
+    int focusId = -1;              // focus fire: enemy id the player picked, -1 = none
     double stunnedUntil = 0;   // scorpion goo: state time when the plant can act again
 
     bool stunned(double now) const { return now < stunnedUntil; }
@@ -85,7 +96,7 @@ struct Shot {
 };
 
 enum class EffectKind { Hit, Splash, Kill, Coin, Leak, Place, Slow, Poison, Flame,
-                        Heal, Hop, Split, Jackpot, Goo, BossDust, FlyerFall };
+                        Heal, Hop, Split, Jackpot, Goo, BossDust, FlyerFall, Lasso };
 
 struct Effect {
     EffectKind kind;
@@ -120,7 +131,7 @@ public:
     std::vector<Effect> effects;
     std::vector<Spit> spits;           // scorpion goo in flight
     // How far above its ground point a bug's sprite is drawn (flyers hover); shots aim there.
-    double visualY(const Enemy &e) const { return data::ENEMIES[e.type].flying ? 16 : 0; }
+    double visualY(const Enemy &e) const { return data::ENEMIES[e.type].flying && !e.grounded(time) ? 16 : 0; }
     std::vector<std::vector<QPointF>> skyLanes;   // pixel polylines flyers follow
     std::vector<QPointF> path;         // pixel waypoints
 
@@ -135,7 +146,14 @@ public:
     Tower *towerAt(int col, int row);
     Tower *getTower(int id);
 
-    Tower *placeTower(int type, int col, int row);
+    // Plant unlocks (claude2-0c): a plant is available from its TowerDef::unlockMap on. Derived
+    // from mapIndex, so reset(0) relocks and reset(N) unlocks everything up to map N.
+    bool unlockAll = false;            // test/debug override: every plant available
+    bool isUnlocked(int type) const {
+        return type >= 0 && type < int(data::TOWERS.size()) && (unlockAll || data::TOWERS[type].unlockMap <= mapIndex);
+    }
+
+    Tower *placeTower(int type, int col, int row);   // nullptr if locked, unaffordable or blocked
     int upgradeCost(const Tower &t) const;   // -1 when at max level
     bool upgradeTower(int id);
     int sellValue(const Tower &t) const;
@@ -145,6 +163,10 @@ public:
     bool setFirePoint(int towerId, double x, double y);
     void clearFirePoint(int towerId);
     int damageOf(const Tower &t) const;   // includes the ambush bonus
+    // Focus fire: these plants shoot this bug whenever it's in range, until it's gone.
+    bool focusFire(const std::vector<int> &towerIds, int enemyId);
+    void clearFocus(int towerId);
+    int enemyNear(double x, double y, double radius) const;   // enemy id near a point, -1 if none
     // Targeting (also used by the renderer/UI to show what a plant would shoot).
     bool canHit(const Tower &t, const Enemy &e) const;   // claude2-63: flyers vs ground attacks
     bool eligible(const Tower &t, const Enemy &e, double rangePx) const;
@@ -168,7 +190,8 @@ signals:
     void mapStarted(int mapIndex);
     void won();
     void lost();
-    void bugSound(const QString &name);   // bug_hop, bug_heal, bug_split, jackpot
+    void bugSound(const QString &name);
+    void wildcard(int enemyId);           // a wild bat just appeared (UI toast)   // bug_hop, bug_heal, bug_split, jackpot
 
 private:
     struct Spawner {
@@ -195,7 +218,9 @@ private:
     void flushPendingBugs();                     // adds bugs born mid-update (grubs)
     void placeBug(Enemy &e);                     // x/y/angle from dist on its lane or the path
     double routeLength(const Enemy &e) const;    // px length of its lane or the path
-    void updateSpits(double dt);                 // scorpion goo flight + stun on impact
+    void updateSpits(double dt);
+    bool steerWildBat(Enemy &e, double dt, double mult);   // true when it reached the house
+    void fireVine(Tower &t, double dt);                 // scorpion goo flight + stun on impact
     struct Route { std::vector<double> segLen, segStart; double length = 0; };
     std::vector<Route> laneRoutes_;
     int nextLane_ = 0;

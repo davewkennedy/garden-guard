@@ -47,6 +47,7 @@ static std::vector<std::array<double, 2>> lanePoints(const Game &g) {
 static void autoPlant(Game &g, const std::vector<int> &types) {
     const auto lane = lanePoints(g);
     for (int type : types) {
+        if (!g.isUnlocked(type)) continue;   // campaign tests respect plant unlocks
         const auto proj = data::TOWERS[type].projectile;
         const bool hitsAir = proj != data::Projectile::Mortar && proj != data::Projectile::Flame;
         int bestCol = -1, bestRow = -1, bestScore = -1;
@@ -99,6 +100,7 @@ int main(int argc, char *argv[]) {
     {
         std::printf("Test 0: rose, corn and clover (Sunny Meadow)\n");
         Game g;
+        g.unlockAll = true;   // mechanics test: every plant on map 1
         Stats s;
         watch(g, s);
         g.coins = 100000;
@@ -115,6 +117,7 @@ int main(int argc, char *argv[]) {
     {
         auto sproutShots = [&](bool withClover) {
             Game g;
+            g.unlockAll = true;
             Stats s;
             watch(g, s);
             g.coins = 100000;
@@ -143,24 +146,31 @@ int main(int argc, char *argv[]) {
         std::printf("Test 0c: per-map waves, bug unlocks and sky lanes\n");
         using namespace data;
         // Bugs first unlocked on each map (Grubs come from caterpillars, never from waves).
+        // Bats are rare wildcards: none before map 5, then 1-2 per map in total.
         const std::vector<std::vector<EnemyType>> unlocks = {
             {Ant, Beetle, Wasp},
             {Caterpillar, Butterfly},
             {Cricket, Scorpion, Snail},
-            {Bat, Mosquito, GoldenBeetle},
-            {},
+            {Mosquito, GoldenBeetle},
+            {Bat}, {}, {}, {}, {}, {},
         };
-        const std::vector<int> laneCount = {0, 1, 1, 2, 2};
+        const std::vector<int> laneCount = {0, 1, 1, 2, 2, 2, 2, 2, 3, 3};
+        const std::vector<std::array<int, 2>> grids = {{15, 10}, {16, 11}, {17, 11}, {18, 12}, {20, 13},
+                                                       {22, 15}, {24, 16}, {25, 17}, {27, 18}, {30, 20}};
         bool sizes = MAPS.size() == unlocks.size(), waves5 = true, unlockedOnly = true, introduces = true;
-        bool lanes = true, noFlyersOnMap1 = true, finale = false;
+        bool lanes = true, noFlyersOnMap1 = true, finale = false, gridOk = true, batsOk = true, pathOk = true;
         std::vector<EnemyType> allowed;
         for (size_t m = 0; m < MAPS.size() && m < unlocks.size(); m++) {
             const MapDef &md = MAPS[m];
             allowed.insert(allowed.end(), unlocks[m].begin(), unlocks[m].end());
             waves5 &= md.waves.size() == 5;
+            gridOk &= md.cols == grids[m][0] && md.rows == grids[m][1];
+            pathOk &= md.path.front()[0] == -1 && md.path.back()[0] == md.cols;
+            int bats = 0;
             std::vector<EnemyType> seen;
             for (const Wave &w : md.waves)
                 for (const WaveGroup &grp : w.groups) {
+                    if (grp.enemy == Bat) bats += grp.count;
                     seen.push_back(grp.enemy);
                     bool ok1 = std::find(allowed.begin(), allowed.end(), grp.enemy) != allowed.end();
                     if (!ok1) std::printf("    map %zu uses locked bug %s\n", m + 1, qPrintable(ENEMIES[grp.enemy].name));
@@ -172,28 +182,82 @@ int main(int argc, char *argv[]) {
                     std::printf("    map %zu never shows its new bug %s\n", m + 1, qPrintable(ENEMIES[e].name));
                     introduces = false;
                 }
+            batsOk &= m < 4 ? bats == 0 : bats >= 1 && bats <= 2;
             lanes &= int(md.skyLanes.size()) == laneCount[m];
             for (const Lane &l : md.skyLanes)
-                lanes &= l.size() >= 2 && l.front()[0] == -1 && l.back()[0] == 15;
-            std::printf("    map %zu %-15s %zu waves, %zu sky lanes\n", m + 1, qPrintable(md.name), md.waves.size(),
-                        md.skyLanes.size());
+                lanes &= l.size() >= 2 && l.front()[0] == -1 && l.back()[0] == md.cols;
+            std::printf("    map %2zu %-17s %dx%d, %zu waves, %zu sky lanes, %d bats\n", m + 1, qPrintable(md.name),
+                        md.cols, md.rows, md.waves.size(), md.skyLanes.size(), bats);
         }
         if (!MAPS.empty() && !MAPS.back().waves.empty())
             for (const WaveGroup &grp : MAPS.back().waves.back().groups)
                 if (grp.enemy == Snail && grp.count >= 2) finale = true;
-        ok &= check(sizes, "5 campaign maps");
+        ok &= check(sizes, "10 campaign maps");
+        ok &= check(gridOk, "grids grow 15x10 -> 30x20");
+        ok &= check(pathOk, "paths run from x = -1 to the house at x = cols");
         ok &= check(waves5, "every map has 5 waves");
         ok &= check(unlockedOnly, "maps only use bugs unlocked so far");
         ok &= check(introduces, "every map shows off its newly unlocked bugs");
         ok &= check(noFlyersOnMap1, "no flyers on map 1");
-        ok &= check(lanes, "sky lanes: none on map 1, 1 on maps 2-3, 2 on maps 4-5, left edge to house");
-        ok &= check(finale, "the finale's last wave brings 2 snails");
+        ok &= check(batsOk, "wild bats: none on maps 1-4, 1-2 per map on maps 5-10");
+        ok &= check(lanes, "sky lanes 0/1/1/2/2/2/2/2/3/3, left edge to house");
+        ok &= check(finale, "the finale's last wave brings at least 2 snails");
+    }
+
+    // U) Plant unlocks (drafted by claude2-0c): locked plants can't be placed, and
+    //    each map's new plants unlock there.
+    {
+        std::printf("Test U: plant unlocks per map\n");
+        const std::vector<std::vector<const char *>> fresh = {
+            {"sprout", "frost", "mortar", "sunflower"},
+            {"corn", "grape"},
+            {"mushroom", "cactus"},
+            {"chili", "rose", "clover"},
+        };
+        bool placeOk = true, freshOk = true;
+        for (int m = 0; m < int(data::MAPS.size()); m++) {
+            Game g;
+            g.reset(m);
+            for (int type = 0; type < int(data::TOWERS.size()); type++) {
+                const bool unlocked = data::TOWERS[type].unlockMap <= m;
+                if (g.isUnlocked(type) != unlocked) placeOk = false;
+                g.coins = 100000;
+                bool placed = false;
+                for (int r = 0; r < g.rows && !placed; r++)
+                    for (int c = 0; c < g.cols && !placed; c++)
+                        if (g.canPlace(c, r)) placed = g.placeTower(type, c, r) != nullptr;
+                if (placed != unlocked) {
+                    std::printf("    map %d: %s placed=%d unlocked=%d\n", m + 1,
+                                qPrintable(data::TOWERS[type].id), placed, unlocked);
+                    placeOk = false;
+                }
+            }
+            if (m < int(fresh.size()))
+                for (const char *id : fresh[m]) {
+                    const int type = typeOf(id);
+                    if (data::TOWERS[type].unlockMap != m) {
+                        std::printf("    %s unlocks on map %d, expected %d\n", id,
+                                    data::TOWERS[type].unlockMap + 1, m + 1);
+                        freshOk = false;
+                    }
+                    if (data::TOWERS[type].counters.isEmpty() && m > 0) freshOk = false;   // card text
+                }
+        }
+        ok &= check(placeOk, "locked plants can't be placed; unlocked ones can");
+        ok &= check(freshOk, "each map's new plants exist, unlock there, and have card text");
+        Game g;
+        g.reset(2);
+        const bool hadCactus = g.isUnlocked(cactus);
+        g.reset(0);
+        ok &= check(hadCactus && !g.isUnlocked(cactus) && !g.isUnlocked(corn),
+                    "reset(0) relocks; reset(N) unlocks up to map N");
     }
 
     // 1) New plants only on map 1: do they fire, poison, burn and pay out?
     {
         std::printf("Test 1: new plants only (Sunny Meadow)\n");
         Game g;
+        g.unlockAll = true;
         Stats s;
         watch(g, s);
         g.coins = 100000;
