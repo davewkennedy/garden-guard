@@ -14,4 +14,10 @@ Dale (maps/balance -> autopilot, parity, screenshots)
   missing Renderer). Exit 1 on console.error/uncaught/failed check. tools/stub.html = touch self-test.
   Found: renderer.js missing, ui.js View.fit() not a function (Hank fixed).
 - 14:38 --touch ALL OK on iphone + android, 0 errors.
+- 14:42 --campaign (PC, speed=20): WON, 0 errors, 234 s; lives 20/20/20/15/15/13/11/11/9/3 (real
+  frame dt vs fixed 1/60 in headless -> small drift; headless parity still exact).
+- 14:43 --touch handles tap-to-zoom on small tiles (<34 px): map 8 iphone/android OK, map 1 one-tap OK.
+- 14:45 autopilot.js: ai.fixedStep({manualNextMap}) + ai.resetCadence(): exact simtest cadence for a
+  fixed 1/60 loop (1 s chunks; think at steps 0/30; phase checked at chunk boundaries; one Build chunk
+  then startWave). `node tools/parity.js --fixed` proves it: identical to C++.
 - Left: rerun parity after changes; QA screenshots at the milestones.

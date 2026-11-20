@@ -44,10 +44,7 @@
   if (scene && scene !== 'intro') {
     try { Scenes.setup(scene, startMap); } catch (e) { console.error('scene failed', e); }
   } else if (params.has('map') && !scene) {
-    UI.closeCard('ovIntro');
-    game.reset(startMap);
-    UI.st.mapStartLives = game.lives;
-    UI.showNewBugs();
+    UI.startRunAt(startMap);
   }
   if (params.get('autopilot') === '1') {
     UI.setAuto(true);
@@ -59,13 +56,30 @@
   // ---------- loop ----------
   let last = performance.now();
   let errors = 0;
+  const STEP = 1 / 60;
+  let acc = 0;
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
     last = now;
     try {
       resize(false);
-      if (!UI.paused()) for (let i = 0; i < UI.st.speed; i++) game.update(dt);
+      // Fixed 1/60 s steps (with an accumulator), so the game plays identically on 60 Hz and
+      // 120 Hz screens and matches the headless parity runs exactly.
+      if (!UI.paused()) {
+        acc += dt * UI.st.speed;
+        let steps = 0;
+        const cap = 4 * UI.st.speed;   // don't spiral on a slow device: drop time instead
+        while (acc >= STEP && steps < cap) {
+          game.update(STEP);
+          acc -= STEP;
+          steps++;
+          if (UI.st.auto && steps % 4 === 0) UI.runAutopilot();   // the AI keeps up at high speed
+        }
+        if (steps >= cap) acc = 0;
+      } else {
+        acc = 0;
+      }
       UI.runAutopilot();
       UI.view.realTime = now / 1000;
       UI.sync();
@@ -75,7 +89,7 @@
     }
   }
   resize(true);
-  requestAnimationFrame(frame);
+  frame(performance.now());   // paint once right away (slow first rAF on iPad/headless)
 
   // Offline support once hosted (never on file://).
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {

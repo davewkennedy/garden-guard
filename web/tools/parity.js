@@ -72,6 +72,31 @@ function play(difficulty) {
     return r;
 }
 
+// Same game driven the browser way: a plain fixed-step loop calling ai.fixedStep() before each
+// update(1/60), as main.js does. Must give the same numbers as play().
+function playFixed(difficulty) {
+    const g = new Game();
+    if (g.quiet !== undefined) g.quiet = true;
+    if (difficulty !== undefined && g.setDifficulty) g.setDifficulty(difficulty);
+    const ai = new Autopilot(g);
+    const r = { perMap: [], plants: [], waves: [], maps: [], won: false };
+    let recorded = -1;
+    for (let step = 0; step < 60 * 60 * 120; step++) {
+        ai.fixedStep();
+        g.update(1.0 / 60);
+        const done = g.phase === Phase.MapCleared || g.phase === Phase.Won || g.phase === Phase.Lost;
+        if (done && recorded !== g.mapIndex) {
+            recorded = g.mapIndex;
+            r.perMap.push(g.lives);
+            r.plants.push(g.towers.length);
+        }
+        if (g.phase === Phase.Won || g.phase === Phase.Lost) break;
+    }
+    r.won = g.phase === Phase.Won;
+    r.result = r.won ? 'WON' : `LOST on map ${g.mapIndex + 1} wave ${g.wave}`;
+    return r;
+}
+
 let mismatches = 0;
 function compare(name, r) {
     const js = r.perMap.join('/');
@@ -112,6 +137,13 @@ if (args.has('--waves')) {
         console.log(`    JS : ${normal.waves[first] || '(none)'}`);
         if (first > 0) console.log(`    (previous line matched: ${base[first - 1].trim().slice(0, 60)}...)`);
     }
+}
+
+if (args.has('--fixed')) {
+    console.log('Browser-style driver (Autopilot.fixedStep before each update(1/60)):');
+    const f = playFixed(Diff.Normal);
+    compare('Normal', f);
+    if (f.plants.join() !== CPP.Normal.plants.join()) console.log(`         plants JS ${f.plants.join('/')}  C++ ${CPP.Normal.plants.join('/')}`);
 }
 
 if (!args.has('--normal')) {

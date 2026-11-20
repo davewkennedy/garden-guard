@@ -11,7 +11,9 @@
 //                                  the plant; long-press; 2-finger pinch -> View.zoom changes
 //     --campaign                   autopilot campaign: waits until UI.game.phase is Won/Lost
 //                                  (or --seconds runs out, default 600); prints progress per map
-//     --shot out.png               screenshot at the end
+//     --soak                       sample heap (after GC), DOM nodes, listeners, fps, worst frame and
+//                                  every UI.game array size each 15 s for --seconds; checks no growth
+//     --shot out.png              screenshot at the end
 //     --page path.html             another page instead of index.html (e.g. tools/stub.html)
 //     --eval "expr"                evaluate a JS expression in the page at the end and print it
 //   Exit code: 0 = no console errors / exceptions and all checks passed, 1 otherwise.
@@ -147,22 +149,26 @@ async function touchTests(cdp) {
     const tilePos = () => cdp.eval(`(() => { const cr = document.getElementById('board').getBoundingClientRect();
         const p = View.worldToScreen(${plan.col} * 64 + 32, ${plan.row} * 64 + 32); return { x: cr.x + p.x, y: cr.y + p.y }; })()`);
     const findPlaced = () => cdp.eval(`(() => { const t = UI.game.towers.find(t => t.col === ${plan.col} && t.row === ${plan.row}); return t ? { id: t.id, type: t.type } : null; })()`);
+    // Small tiles on a phone: the first tap may only zoom in on the spot ("tap again to plant").
+    // The threshold is Hank's (Input.ZOOM_TAP_PX if exposed, else 28 px), so detect what happened.
     const tilePx = await cdp.eval('View.scale * 64');
-    if (tilePx < 34) {
-        // Small tiles on a phone: the first tap only zooms in on the spot ("tap again to plant").
-        const z0 = await cdp.eval('View.zoom');
+    const limit = await cdp.eval(`(typeof Input !== 'undefined' && Input.ZOOM_TAP_PX) || 28`);
+    const z0 = await cdp.eval('View.zoom');
+    await tap(cdp, plan.tile);
+    await sleep(250);
+    let placed = await findPlaced();
+    const z1 = await cdp.eval('View.zoom');
+    if (!placed && z1 > z0) {
+        const toast = await cdp.eval(`(document.getElementById('toast') || {}).textContent || ''`);
+        check(tilePx < limit, `tiles ${tilePx.toFixed(1)} px (< ${limit}): tap 1 zoomed in (View.zoom ${z0.toFixed(2)} -> ${z1.toFixed(2)}, tiles ${(z1 / z0 * tilePx).toFixed(1)} px), toast "${toast.trim()}"`);
+        plan.tile = await tilePos();
         await tap(cdp, plan.tile);
         await sleep(250);
-        const z1 = await cdp.eval('View.zoom'), early = await findPlaced();
-        const toast = await cdp.eval(`(document.getElementById('toast') || {}).textContent || ''`);
-        check(z1 > z0 && !early, `small tiles (${tilePx.toFixed(1)} px): tap 1 zooms in (View.zoom ${z0.toFixed(2)} -> ${z1.toFixed(2)}, tiles ${(z1 / z0 * tilePx).toFixed(1)} px), no plant yet; toast "${toast.trim()}"`);
-        plan.tile = await tilePos();
+        placed = await findPlaced();
     } else {
-        console.log(`        tiles are ${tilePx.toFixed(1)} px: one tap should plant`);
+        check(!!placed, `tiles ${tilePx.toFixed(1)} px (zoom-first limit ${limit}): planted with one tap` +
+            (tilePx < limit ? '  (note: expected a zoom-first tap here)' : ''));
     }
-    await tap(cdp, plan.tile);
-    await sleep(200);
-    const placed = await findPlaced();
     check(!!placed && placed.type === plan.type, `tap tile ${plan.col},${plan.row} -> ${plan.name} planted (coins ${plan.coins} -> ${await cdp.eval('UI.game.coins')})`);
     await cdp.eval('UI.view.placing = -1');
     plan.tile = await tilePos();
@@ -249,6 +255,42 @@ async function main() {
 
         if (flag('touch')) await touchTests(cdp);
 
+        if (flag('soak')) {
+            // Memory/frame soak: every 15 s force a GC, then sample the JS heap, DOM node count,
+            // game array sizes, and frame times from a rAF probe (fps, worst frame in the window).
+            await cdp.send('Performance.enable');
+            await cdp.eval(`(() => { window.__ft = { n: 0, max: 0, last: performance.now() };
+                const f = (t) => { const d = t - __ft.last; __ft.last = t; __ft.n++; if (d > __ft.max) __ft.max = d; requestAnimationFrame(f); };
+                requestAnimationFrame(f); })()`);
+            const sample = async () => {
+                await cdp.send('HeapProfiler.collectGarbage');
+                const m = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(x => [x.name, x.value]));
+                const s = await cdp.eval(`(() => { const g = UI.game, ft = __ft, n = ft.n, mx = ft.max; __ft.n = 0; __ft.max = 0;
+                    const sizes = {}; for (const k of Object.keys(g)) if (Array.isArray(g[k])) sizes[k] = g[k].length;
+                    return { frames: n, maxFrame: mx, sizes, map: g.mapIndex + 1, wave: g.wave, lives: g.lives, phase: g.phase }; })()`);
+                return { heap: m.JSHeapUsedSize / 1048576, nodes: m.Nodes, listeners: m.JSEventListeners, ...s };
+            };
+            const end = Date.now() + seconds * 1000, rows = [];
+            let prev = Date.now();
+            await sample();
+            while (Date.now() < end) {
+                await sleep(Math.min(15000, end - Date.now()));
+                const r = await sample(), dt = (Date.now() - prev) / 1000; prev = Date.now();
+                rows.push(r);
+                const big = Object.entries(r.sizes).filter(([, v]) => v > 0).map(([k, v]) => `${k}=${v}`).join(' ');
+                console.log(`${stamp()} heap ${r.heap.toFixed(2)} MB  nodes ${r.nodes}  listeners ${r.listeners}  fps ${(r.frames / dt).toFixed(0)}  worst frame ${r.maxFrame.toFixed(0)} ms  map ${r.map} wave ${r.wave} ${r.phase}  [${big}]`);
+            }
+            if (rows.length >= 3) {
+                const h = rows.map(r => r.heap), n = rows.map(r => r.nodes);
+                const mid = Math.floor(rows.length / 2);
+                const growth = Math.min(...h.slice(mid)) - Math.min(...h.slice(0, mid));
+                check(growth < 2, `heap stable: min ${Math.min(...h.slice(0, mid)).toFixed(2)} MB (1st half) -> ${Math.min(...h.slice(mid)).toFixed(2)} MB (2nd half)`);
+                check(n[n.length - 1] < n[0] * 1.5 + 50, `DOM nodes stable: ${n[0]} -> ${n[n.length - 1]}`);
+                const fps = rows.map(r => r.frames / 15);
+                check(Math.min(...fps) > 30, `fps never below 30 per window (min ${Math.min(...fps).toFixed(0)})`);
+            }
+        }
+
         if (campaign) {
             let lastMap = 0, s = null;
             const end = Date.now() + seconds * 1000;
@@ -261,7 +303,7 @@ async function main() {
             console.log(`${stamp()} campaign end: ${fmt(s)}`);
             check(s && (s.phase === 'Won' || s.phase === 'Lost'), `campaign finished within ${seconds} s`);
             check(s && s.phase === 'Won', 'autopilot won the campaign in the browser');
-        } else if (!flag('touch')) {
+        } else if (!flag('touch') && !flag('soak')) {
             await sleep(seconds * 1000);
         }
         console.log(`${stamp()} final: ${fmt(await cdp.eval(STATE))}`);

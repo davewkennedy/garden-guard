@@ -19,7 +19,7 @@ const UI = (() => {
   }
 
   // What the renderer shows besides the game (the C++ View struct).
-  const view = { hover: null, placing: -1, selectedId: -1, aimingId: -1, group: [], realTime: 0 };
+  const view = { hover: null, placing: -1, selectedId: -1, aimingId: -1, group: [], realTime: 0, touch: false };
   const st = {
     userPaused: false, speed: 1, auto: false, lastThink: -1, buildStart: -1,
     cardSince: 0, cardShown: null, lastClick: { x: 0, y: 0 },
@@ -393,7 +393,46 @@ const UI = (() => {
   function totalStars() { let s = 0; for (let i = 0; i < DATA.MAPS.length; i++) s += load('stars/' + i, 0); return s; }
   function furthestMap() { return Math.min(Math.floor(load('best', 0) / 100), DATA.MAPS.length - 1); }
 
+  // ---------- run checkpoint (web only) ----------
+  // Phones often close a browser tab in the background. Each map start saves where the run is
+  // (map, lives, stars, stats), so the intro can offer to resume it instead of starting over.
+  function saveCheckpoint() {
+    save('run', {
+      map: game.mapIndex, lives: game.lives, difficulty: game.difficulty,
+      runStars: st.runStars, runStartMap: st.runStartMap,
+      stats: [st.runKills, st.runPlanted, st.runShots, st.runCoins],
+    });
+  }
+  function clearCheckpoint() { save('run', null); }
+  function checkpoint() {
+    const c = load('run', null);
+    return c && c.map >= 0 && c.map < DATA.MAPS.length && c.lives > 0 ? c : null;
+  }
+  function resumeRun() {
+    const c = checkpoint();
+    if (!c) return;
+    sfx('click');
+    applyDifficulty();
+    game.reset(c.map);
+    game.lives = c.lives;
+    st.mapStartLives = c.lives;
+    st.runStars = c.runStars || [];
+    st.runStartMap = c.runStartMap || 0;
+    [st.runKills, st.runPlanted, st.runShots, st.runCoins] = c.stats || [0, 0, 0, 0];
+    saveCheckpoint();   // reset() saved full lives; store the real ones again
+    clearView();
+    setUserPaused(false);
+    if (!st.auto) setSpeed(1);
+    st.primed = false;
+    closeCard('ovIntro');
+    showNewBugs();
+  }
+
   function buildIntro() {
+    let c = checkpoint();
+    if (c && c.map === 0 && c.lives >= DATA.START_LIVES) c = null;   // nothing to resume yet
+    show($('btnResume'), !!c);
+    if (c) $('btnResume').textContent = `▶ Resume your run: ${DATA.MAPS[c.map].name} (map ${c.map + 1}), ${livesText(c.lives)}`;
     let text = `Bugs are marching on your house! Plant defenders beside the path to stop them, and upgrade ` +
       `them with the coins you earn. Survive ${wavesOf(0).length} waves in each of ${DATA.MAPS.length} gardens. ` +
       `New bugs (even flying ones!) appear as you go, and your lives carry over between gardens.`;
@@ -518,6 +557,7 @@ const UI = (() => {
 
   function showEnd(won) {
     clearView();
+    clearCheckpoint();   // the run is over
     $('endTitle').textContent = won ? 'You saved every garden!' : 'The bugs got through!';
     let text = won ? `You cleared all ${game.totalMaps} maps with ${livesText(game.lives)} left.`
       : `You reached wave ${game.wave} of ${game.totalWaves} on ${game.map().name} (map ${game.mapIndex + 1} of ${game.totalMaps}).`;
@@ -581,6 +621,7 @@ const UI = (() => {
   function toggleJournal() {
     sfx('click');
     if (isOpen('ovJournal')) { closeCard('ovJournal'); return; }
+    if (overlayOpen()) return;   // never on top of another card (as in C++)
     try {
       if (typeof Journal !== 'undefined' && Journal.render) Journal.render($('journalHost'), game);
       else $('journalHost').textContent = 'The journal is still being written…';
@@ -652,6 +693,7 @@ const UI = (() => {
     });
     on('mapStarted', (index) => {
       st.mapStartLives = game.lives;
+      if (!game.quiet) saveCheckpoint();
       toast(`Map ${index + 1} of ${game.totalMaps}: ${DATA.MAPS[index].name}`);    });
     on('won', () => {
       awardStars();
@@ -705,8 +747,16 @@ const UI = (() => {
       view.selectedId = -1;
     });
     click('startWave', () => { if (game.startWave()) sfx('click'); else fail("Can't start a wave now"); });
-    click('btnStart', () => { sfx('click'); applyDifficulty(); game.reset(0); st.mapStartLives = game.lives; resetRunStats(0); closeCard('ovIntro'); });
+    click('btnStart', () => { sfx('click'); applyDifficulty(); st.mapStartLives = game.lives; resetRunStats(0); saveCheckpoint(); closeCard('ovIntro'); });
+    // Like Qt's NoFocus: header/side buttons never keep keyboard focus, so Enter/Space don't re-click
+    // them and the shortcuts keep working. Card buttons stay focusable.
+    document.querySelectorAll('#header button, #side button, #boardWrap button').forEach((b) => {
+      b.tabIndex = -1;
+      b.addEventListener('mousedown', (e) => e.preventDefault());
+    });
+    $('shop').addEventListener('mousedown', (e) => e.preventDefault());
     click('btnContinue', () => startRunAt(furthestMap()));
+    click('btnResume', resumeRun);
     click('btnChoose', () => { sfx('click'); showMapSelect(furthestMap()); });
     click('btnMapBack', () => { sfx('click'); closeCard('ovMapSelect'); openCard('ovIntro'); });
     click('btnNext', goToNextMap);
@@ -754,7 +804,7 @@ const UI = (() => {
   return {
     init, sync, runAutopilot, paused, overlayOpen, onHover, onHoverLeft, onClick, onDoubleClick, onKey, cancel,
     toast, fail, sfx, view, st, setAuto, setSpeed, setUserPaused, showMapCleared, showNewBugs, showEnd,
-    showMapSelect, toggleJournal, celebrate, load, save, openCard, closeCard,
+    showMapSelect, toggleJournal, celebrate, startRunAt, load, save, openCard, closeCard,
     get game() { return game; },
   };
 })();

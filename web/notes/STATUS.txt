@@ -10,6 +10,12 @@ Start 14:29, deadline 15:44 (WSL clock).
 - 14:38 First integrated build: no console errors; touch QA ALL OK on iPhone and Android sizes
   (tap shop -> plant, select, double-tap group, long-press, pinch 1x->4x, pan)
 
+- 14:40 Phone layout fixes + compact plant panel, map select 2-up, iPad checks (Bill, css/phone.css); SW works offline
+- 14:43 Browser campaign at speed 20: WON, 0 errors (Dale). Snapshot ~/projects/snapshots/gardenguard-web-1-integrated.tar
+- 14:44 Boomhauer's code review of the UI port: 6 fixes applied. Bug/terrain drawing + bats/vine/wind verified vs C++.
+- 14:45 Web extras: tiny-tile auto-zoom on touch, iOS audio unlock, Android install button, fixed 1/60 s steps,
+  run checkpoint ("Resume your run" after a phone closes the tab), no key hints on touch screens.
+
 ## Backlog (future sessions, not this port)
 - Power-ups (user idea via Peggy): first with in-game coins/stars, e.g. "Fertilizer: plants fire 2x for 10 s",
   "Bug spray: damage everything on screen". Real-money purchases deferred: needs payments + a server

@@ -231,6 +231,32 @@ var Autopilot = (function () {
         return acted;
     };
 
+    // Exact simtest cadence, for a fixed-step loop: call once per 1/60 s step, right BEFORE
+    // game.update(1/60). Reproduces tests/simtest.cpp Test 3 frame for frame:
+    //   - the game runs in 1 s chunks of 60 steps; think() on steps 0 and 30 of each chunk
+    //   - the phase is only looked at on chunk boundaries:
+    //       MapCleared -> game.nextMap() (unless opts.manualNextMap; then it waits for the caller)
+    //       Build      -> one full 1 s chunk of shopping, then startWave() at the next boundary
+    // With this, the browser campaign gives the same lives as tools/parity.js (exact C++ parity).
+    Autopilot.prototype.fixedStep = function (opts) {
+        var g = this.g;
+        if (this.frame === undefined) { this.frame = 0; this.pendingStart = false; }
+        if (this.frame % 60 === 0) {
+            if (g.phase === Autopilot.phase('MapCleared') && !(opts && opts.manualNextMap)) {
+                g.nextMap();
+                this.pendingStart = false;
+            }
+            if (g.phase === Autopilot.phase('Build')) {
+                if (this.pendingStart) { g.startWave(); this.pendingStart = false; }
+                else this.pendingStart = true;
+            }
+        }
+        if (this.frame % 30 === 0) this.think();
+        this.frame++;
+    };
+    // Call when the player takes over or the game is reset, so the next fixedStep starts a chunk.
+    Autopilot.prototype.resetCadence = function () { this.frame = undefined; };
+
     // Phase enum lookup: game.js may export Game.Phase / DATA.Phase as objects, or use strings.
     Autopilot.phase = function (name) {
         var G = typeof Game !== 'undefined' ? Game : null;

@@ -35,7 +35,13 @@ duplicate journal title, tiny tiles on big maps, small header buttons.
 14:42 css/phone.css (mine; overrides inside @media max-height:560px): compact tower panel (2-col grid,
 shop shrinks to one-line chips while a plant is selected), map select in 2 columns with Back visible,
 journal host fills the card, 36px header buttons, bigger ▸ toggle. sw list rebuilt (21 files).
-Open: the PC tower panel is cut off at 1280x800 on map 10 (style.css, Hank's call).
+14:44 phone.css also covers PC/iPad now: chips while a plant is selected (561-900px tall), so 🎯 and Cancel
+focus are visible at 1280x800 and 1366x768; the iPad header no longer overlaps (<=1180px wide); the hint is
+hidden while the panel is open. iPad QA at 1024x768 and 1180x820 with touch: OK. sw list rebuilt
+(ggweb-95dcf34aaa). TODO: rerun tools/make-sw-list.sh at the 15:30 freeze.
+14:45 tools/pwa-check.js (CDP): manifest OK, Chrome reports no installability errors, SW controls the page,
+the install button shows (with and without the engagement bypass), offline reload boots. Manifest gained "id".
+iOS meta tags OK; suggested to Hank: touch-action/gesturestart so Safari can't page-zoom.
 Registration snippet for main.js (Hank adds it):
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol))
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

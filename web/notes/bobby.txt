@@ -24,4 +24,7 @@ QA: a scratch harness in my scratchpad renders maps 0/4/6/9 at PC 1280x800 and p
   No console errors.
 14:42 integrated QA in index.html: PC play/focus scenes, iPhone night scene at dpr 3, Android map 9. No JS errors
   (only the file:// manifest CORS message). Sky lanes use the C++ board-width FX (they're in the cached bg).
-LEFT: waiting for tasks from Hank (Qt-vs-web parity, phone polish).
+14:47 Qt-vs-web parity at 1280x800: play1-10, night, vine, focus, aim, bugs3, celebrate, placing all match.
+  Fixed: board top-aligned with a 6 px shadow reserve (boardRect); blank-board hardening (no caching at 0x0,
+  immediate bg rebuild on big size jumps). Added a touch loupe (ui.touch = finger down while placing/aiming).
+  Headless shots: use --virtual-time-budget >= 6000 (blank boards at 2500 come from capture before the first rAF).

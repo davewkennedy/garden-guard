@@ -22,10 +22,13 @@ Verified: Node checks for data/audio, plus a headless Chromium test page for jou
   (844x390 and 1280x800).
 14:38 renderer-bugs.js dropped: Bobby already ported drawEnemies, terrain and bug FX in renderer.js. I reviewed his
   port line by line against my C++ and it matches (sent to Bobby). Next: headless screenshot QA once index.html exists.
-14:44 audio.js: iOS-safe unlock (idempotent; lazy ctx inside the gesture; resume + 1-sample silent buffer whenever the
+14:39 audio.js: iOS-safe unlock (idempotent; lazy ctx inside the gesture; resume + 1-sample silent buffer whenever the
   state isn't 'running'; no latch, so iOS background suspends recover on the next gesture).
-14:46 QA: headless screenshots of the real page, maps 3/5/6/9 (1280x800). Rocks, ponds, ice and lily pads sit on the
+14:41 QA: headless screenshots of the real page, maps 3/5/6/9 (1280x800). Rocks, ponds, ice and lily pads sit on the
   right tiles and match the Qt look; no console errors.
   PARITY (bugs): the same scenario in Node (game.js) and C++ (game.cpp): wild bat arrival per map 15.8..27.8 s, mean
   21.1, worst 27.8, never off-board. All 10 maps are IDENTICAL to 0.1 s. Vine on map 2 grounded 6 flyers in both,
   and mortar canHit only while grounded holds in both. Wind on map 6 caps at 1.50 tiles.
+14:43 Review of Hank's ui/focusfire/scenes/input/main vs mainwindow/focusfire/boardwidget.cpp sent (8 items; top:
+  mouse clicks dropped after >10 px jitter, journal button opens over other cards, ?map=N skips startRunAt,
+  non-card buttons keep focus so Enter re-clicks them). journal.js: columns now fit 2-up in the 640 px card.

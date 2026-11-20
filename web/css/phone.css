@@ -17,6 +17,7 @@
   #sideBody:has(#towerPanel:not(.hidden)) .shopKey { align-self: center; }
   #sideBody:has(#towerPanel:not(.hidden)) #shop { gap: 4px; }
   #sideBody:has(#towerPanel:not(.hidden)) #shopInfo { display: none; }
+  #sideBody:has(#towerPanel:not(.hidden)) :is(#hint, #touchHint) { display: none; }   /* was cut by the footer */
 }
 
 @media (max-height: 560px) {

@@ -41,17 +41,20 @@ var View = (function () {
     function clampOffsets() {
         var bw = V.W * V.scale, bh = V.H * V.scale;
         V.ox = bw <= V.cssW ? (V.cssW - bw) / 2 : clamp(V.ox, V.cssW - bw, 0);
-        V.oy = bh <= V.cssH ? (V.cssH - bh) / 2 : clamp(V.oy, V.cssH - bh, 0);
+        // Top-aligned like BoardWidget::boardRect (the space below holds the board's shadow).
+        V.oy = bh <= V.cssH ? 0 : clamp(V.oy, V.cssH - bh, 0);
     }
 
     function refit() {
-        V.fit = V.cssW > 0 && V.cssH > 0 ? Math.min(V.cssW / V.W, V.cssH / V.H) : 1;
+        // Like boardRect: leave 6 px below the board for its shadow.
+        V.fit = V.cssW > 0 && V.cssH > 6 ? Math.min(V.cssW / V.W, (V.cssH - 6) / V.H) : 1;
         V.scale = V.fit * V.zoom;
     }
 
     V.resize = function (cssW, cssH, dpr, game) {
         // Remember which world point is at the screen center so rotation/resizing keeps the view.
-        var hadSize = V.cssW > 0 && V.cssH > 0;
+        if (!(cssW >= 2 && cssH >= 2)) return;   // before layout: keep the last good size
+        var hadSize = V.cssW > 1 && V.cssH > 1;
         var center = hadSize ? V.screenToWorld(V.cssW / 2, V.cssH / 2) : null;
         V.cssW = Math.max(1, cssW || 1);
         V.cssH = Math.max(1, cssH || 1);

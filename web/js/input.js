@@ -6,9 +6,11 @@
 
 const Input = (() => {
   const TAP_MOVE = 10;          // px a finger may wander and still count as a tap
-  const DOUBLE_MS = 330;        // second tap within this time on the same tile = double-tap
+  const DOUBLE_MS = 450;        // second tap within this time on the same tile = double-tap
   const LONG_MS = 450;
-  const MIN_TILE_PX = 34, TARGET_TILE_PX = 46;   // touch: auto-zoom when tiles are smaller than this
+  // Touch: auto-zoom when tiles are smaller than this. Bobby's loupe (shown above the finger while
+  // placing, committed on lift) makes ~28 px tiles accurate enough; below that, zoom first.
+  const MIN_TILE_PX = 28, TARGET_TILE_PX = 44;
   let canvas = null;
   const pointers = new Map();   // pointerId -> {x, y, startX, startY, t, moved, type}
   let pinch = null;             // {dist, mx, my}
@@ -73,6 +75,7 @@ const Input = (() => {
       if (e.button !== 0) return;
       return;   // mouse clicks fire on pointerup (so a drag can pan instead)
     }
+    UI.view.touch = true;   // the renderer shows a loupe above the finger while placing/aiming
     if (pointers.size === 2) {
       clearTimeout(longTimer);
       const [a, b] = [...pointers.values()];
@@ -150,14 +153,17 @@ const Input = (() => {
     const q = pointers.get(e.pointerId);
     pointers.delete(e.pointerId);
     clearTimeout(longTimer);
+    if (![...pointers.values()].some((p) => p.type !== 'mouse')) UI.view.touch = false;
     if (pointers.size < 2) pinch = null;
     if (!q || e.type === 'pointercancel') return;
     if (q.type === 'mouse' && e.button !== 0) return;
     const p = local(e);
     if (q.panning) return;
     // A tap, or (touch while placing/aiming) a drag that ends on a tile: plant/aim there.
+    // A mouse click always counts when not zoomed (Qt fires on press, so a shaky click still lands).
     const placingDrag = q.type !== 'mouse' && q.moved && !zoomed() && (UI.view.placing >= 0 || UI.view.aimingId >= 0);
-    if (q.moved && !placingDrag) return;
+    const mouseClick = q.type === 'mouse' && !zoomed();
+    if (q.moved && !placingDrag && !mouseClick) return;
     if (longFired) { longFired = false; return; }   // long-press only shows info
     tap(p.x, p.y, q.type !== 'mouse');
     if (q.type !== 'mouse' && UI.view.placing < 0 && UI.view.aimingId < 0) {
@@ -199,5 +205,5 @@ const Input = (() => {
     document.addEventListener('touchmove', (e) => { if (e.target === canvas) e.preventDefault(); }, { passive: false });
   }
 
-  return { init };
+  return { init, MIN_TILE_PX, TARGET_TILE_PX, ZOOM_TAP_PX: MIN_TILE_PX };
 })();

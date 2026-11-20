@@ -2,6 +2,7 @@
   "name": "Garden Guard++",
   "short_name": "Garden Guard",
   "description": "A cozy tower-defense game: plant defenders to stop the bugs.",
+  "id": "./index.html",
   "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",

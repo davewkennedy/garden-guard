@@ -282,7 +282,10 @@ var Renderer = (function () {
         var key = game.mapIndex + '|' + W + 'x' + H;
         var step = bgStepFor(scale * dpr);
         if (step !== bgWant) { bgWant = step; bgWantSince = now; }
-        if (!bg || key !== bgKey || (step !== bgRes && now - bgWantSince > 0.25)) {
+        // Rebuild now for a new map or a big jump (first real size after layout, rotation);
+        // during a pinch wait until the zoom settles.
+        var jump = step > bgRes * 1.9 || step < bgRes / 1.9;
+        if (!bg || key !== bgKey || (step !== bgRes && (jump || now - bgWantSince > 0.25))) {
             bgKey = key;
             bgRes = step;
             bg = buildBackground(game, step);
@@ -1412,6 +1415,58 @@ var Renderer = (function () {
         p.restore();
     }
 
+    // Touch loupe: while a finger is down placing a plant or picking a fire point, the finger hides
+    // the tile, so show a bubble above it (screen space, constant size) with the plant / 🎯 and a
+    // green (ok) or red (blocked / out of range) ring, plus a pointer down to the tile.
+    function drawTouchLoupe(p, g, U, view) {
+        if (!U.touch || !U.hover || (U.placing < 0 && U.aimingId < 0)) return;
+        var h = U.hover;
+        var cx = view.ox + (h.col * TILE + TILE / 2) * view.scale;
+        var cy = view.oy + (h.row * TILE + TILE / 2) * view.scale;
+        var ok, icon, potType = -1;
+        if (U.placing >= 0) {
+            ok = !!h.valid;
+            icon = DATA_().TOWERS[U.placing].icon;
+            potType = U.placing;
+        } else {
+            var t = null;
+            for (var i = 0; i < g.towers.length; i++) if (g.towers[i].id === U.aimingId) t = g.towers[i];
+            if (!t) return;
+            var x = h.col * TILE + TILE / 2, y = h.row * TILE + TILE / 2;
+            ok = Math.hypot(x - t.x, y - t.y) <= tdef(t).levels[t.level].range * TILE;
+            icon = '🎯';
+        }
+        var R = 30, lift = 74;
+        var bx = clamp(cx, R + 4, view.cssW - R - 4);
+        var by = cy - lift;
+        if (by < R + 4) by = cy + lift;   // no room above (top row): show it below the finger
+        var ring = ok ? '#4caf50' : '#e0533d';
+        p.save();
+        p.globalAlpha = 1;
+        // Pointer from the bubble to the tile, and a ring around the tile itself.
+        pen(p, ring, 3, true);
+        line(p, bx, by + (by < cy ? R : -R), cx, cy + (by < cy ? -view.scale * TILE * 0.5 : view.scale * TILE * 0.5));
+        strokeCircle(p, cx, cy, Math.max(10, view.scale * TILE * 0.55), ring, 3);
+        // Bubble.
+        p.shadowColor = 'rgba(0,0,0,0.3)';
+        p.shadowBlur = 8;
+        p.shadowOffsetY = 2;
+        fillCircle(p, bx, by, R, 'rgba(255,255,255,0.96)');
+        p.shadowColor = 'transparent';
+        strokeCircle(p, bx, by, R, ring, 4);
+        if (potType >= 0) p.drawImage(pot(potType), bx - R * 0.95, by - R * 0.95, R * 1.9, R * 1.9);
+        var sz = R * (potType >= 0 ? 0.95 : 1.15);
+        p.drawImage(glyph(icon, 32, 3), bx - sz * GLYPH_PAD / 2, by - 2 - sz * GLYPH_PAD / 2, sz * GLYPH_PAD, sz * GLYPH_PAD);
+        // ✓ / ✕ badge.
+        fillCircle(p, bx + R * 0.72, by + R * 0.72, 10, ring);
+        p.font = 'bold 13px ' + UI_FONT;
+        p.textAlign = 'center';
+        p.textBaseline = 'middle';
+        p.fillStyle = '#fff';
+        p.fillText(ok ? '✓' : '✕', bx + R * 0.72, by + R * 0.72 + 0.5);
+        p.restore();
+    }
+
     // ---------- confetti (BoardWidget::celebrate) ----------
     var COLORS = ['#ff5a5f', '#ffc93c', '#4caf50', '#5bc0de', '#b06ad9', '#ff9f5a', '#ffffff'];
     var confetti = [], pendingBurst = false, lastConfetti = 0;
@@ -1461,6 +1516,7 @@ var Renderer = (function () {
             selectedId: ui.selectedId !== undefined ? ui.selectedId : (ui.selection !== undefined ? ui.selection : -1),
             aimingId: ui.aimingId !== undefined ? ui.aimingId : -1,
             group: ui.group || [],
+            touch: !!ui.touch,   // a finger is down (shows the touch loupe while placing/aiming)
         };
         if (U.placing === null) U.placing = -1;
         if (U.selectedId === null) U.selectedId = -1;
@@ -1471,6 +1527,8 @@ var Renderer = (function () {
         var cv = ctx.canvas;
         // Refit when the canvas's CSS size changed without a View.resize (missed resize event,
         // phone rotation, address bar showing/hiding).
+        // Before layout (display:none / 0x0 canvas) draw nothing and cache nothing.
+        if (typeof cv.clientWidth === 'number' && cv.getBoundingClientRect && (cv.clientWidth < 2 || cv.clientHeight < 2)) return;
         var cw = cv.clientWidth || cv.width, ch = cv.clientHeight || cv.height;
         if (!view.cssW || (cv.clientWidth && (Math.abs(cw - view.cssW) > 0.5 || Math.abs(ch - view.cssH) > 0.5)))
             view.resize(cw, ch, (typeof window !== 'undefined' && window.devicePixelRatio) || view.dpr || 1, game);
@@ -1517,6 +1575,7 @@ var Renderer = (function () {
         vis.w = Math.min(view.cssW, rect.x + rect.w) - vis.x;
         vis.h = Math.min(view.cssH, rect.y + rect.h) - vis.y;
         drawBossBar(ctx, game, vis);
+        drawTouchLoupe(ctx, game, U, view);
         if (pendingBurst) { pendingBurst = false; spawnConfetti(vis); lastConfetti = now; }
         drawConfetti(ctx, now, view.cssH);
         ctx.globalAlpha = 1;
