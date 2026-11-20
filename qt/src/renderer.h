@@ -17,6 +17,7 @@ struct View {
     std::optional<Hover> hover;
     int placing = -1;      // tower type being placed, -1 if none
     int selectedId = -1;   // selected tower id, -1 if none
+    int aimingId = -1;     // tower whose fire point is being chosen, -1 if none
 };
 
 class Renderer {
@@ -42,6 +43,10 @@ private:
     void drawEnemies(QPainter &p, const Game &g);
     void drawShots(QPainter &p, const Game &g);
     void drawEffects(QPainter &p, const Game &g);
+    void drawBossBar(QPainter &p, const Game &g);   // big HP bar while a boss is alive
+    void drawFireflies(QPainter &p, const Game &g);
+    void drawFirePoints(QPainter &p, const Game &g, const View &view);
+    void drawSkyLanes(QPainter &g, const Game &game);   // into the background
 
     double dpr_ = 0;
     int bgMap_ = -1;    // which map the background was built for

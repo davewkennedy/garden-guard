@@ -4,8 +4,11 @@
 
 #include "renderer.h"
 
+#include <QColor>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QWidget>
+#include <vector>
 
 class Game;
 
@@ -19,6 +22,7 @@ public:
     void showToast(const QString &text, bool error = false);
     void hideToast();
     void setPausedBanner(bool on);
+    void celebrate();   // burst of confetti over the board
     QSize sizeHint() const override { return {960, 640}; }
 
 signals:
@@ -42,4 +46,10 @@ private:
     bool toastError_ = false;
     bool paused_ = false;
     QTimer toastTimer_;
+
+    // Confetti, in widget coordinates; animated in real time (even while paused).
+    struct Confetto { double x, y, vx, vy, rot, spin, w, h; QColor color; };
+    std::vector<Confetto> confetti_;
+    QElapsedTimer confettiClock_;
+    void drawConfetti(QPainter &p);
 };

@@ -25,6 +25,10 @@ struct Enemy {
     double poisonDps = 0;
     double poisonUntil = 0;   // state time when the poison wears off
     bool alive = true;
+    double abilityTimer = 0;  // counts down to the next hop / heal pulse
+    double hopStart = -1;     // state time of the last hop, -1 if never (renderer arcs it)
+    double healTime = -1;     // state time this bug was last healed, -1 if never
+    int lane = -1;            // flyers: index into the map's sky lanes (-1 = walks the path)
 
     bool slowed(double now) const { return now < slowUntil && slowFactor > 0; }
     bool poisoned(double now) const { return now < poisonUntil && poisonDps > 0; }
@@ -39,7 +43,28 @@ struct Tower {
     double cooldown;
     double shotTime;    // state time of the last shot, -1 if never
     int spent;          // total coins put into this tower
+    // Optional fire point (ambush): only shoot bugs near this spot, aiming there while idle.
+    bool hasFirePoint = false;
+    double fireX = 0, fireY = 0;   // px
+    double stunnedUntil = 0;   // scorpion goo: state time when the plant can act again
+
+    bool stunned(double now) const { return now < stunnedUntil; }
 };
+
+// Scorpion goo glob in flight toward a plant (an enemy projectile).
+struct Spit {
+    int id;
+    int towerId;
+    double fromX, fromY, toX, toY;
+    double x, y;
+    double progress;    // 0..1
+    double stunTime;
+};
+
+// Tuned with a simtest sweep: 1.5 tiles / +30% is the first setting where ambushing
+// with splash/flame plants pays off (smaller zones made plants hold fire too often).
+constexpr double FIRE_POINT_RADIUS = 1.5 * data::TILE;   // px around a fire point that counts
+constexpr double AMBUSH_BONUS = 1.3;                     // damage multiplier with a fire point
 
 struct Shot {
     int id;
@@ -55,9 +80,12 @@ struct Shot {
     double poisonDps, poisonTime;
     double splash;      // px (mortar)
     double startDist;
+    int pierce = 0;              // thorn: bugs it can still hit
+    std::vector<int> hitIds;     // thorn: bugs already hit
 };
 
-enum class EffectKind { Hit, Splash, Kill, Coin, Leak, Place, Slow, Poison, Flame };
+enum class EffectKind { Hit, Splash, Kill, Coin, Leak, Place, Slow, Poison, Flame,
+                        Heal, Hop, Split, Jackpot, Goo, BossDust, FlyerFall };
 
 struct Effect {
     EffectKind kind;
@@ -87,9 +115,15 @@ public:
     std::vector<Tower> towers;
     std::vector<Shot> shots;
     std::vector<Effect> effects;
+    std::vector<Spit> spits;           // scorpion goo in flight
+    // How far above its ground point a bug's sprite is drawn (flyers hover); shots aim there.
+    double visualY(const Enemy &e) const { return data::ENEMIES[e.type].flying ? 16 : 0; }
+    std::vector<std::vector<QPointF>> skyLanes;   // pixel polylines flyers follow
     std::vector<QPointF> path;         // pixel waypoints
 
     const data::MapDef &map() const { return data::MAPS[mapIndex]; }
+    // This map's waves (falls back to the global list if the map has none).
+    const std::vector<data::Wave> &waves() const { return map().waves.empty() ? data::WAVES : map().waves; }
     bool isLastMap() const { return mapIndex + 1 >= totalMaps; }
     // True when the player can't act: between maps, or the campaign is won/lost.
     bool isOver() const { return phase == Phase::MapCleared || phase == Phase::Won || phase == Phase::Lost; }
@@ -104,10 +138,19 @@ public:
     int sellValue(const Tower &t) const;
     int sellTower(int id);                   // refund, 0 if not found
 
+    // Fire points: the point must be within the plant's range. Returns false if not.
+    bool setFirePoint(int towerId, double x, double y);
+    void clearFirePoint(int towerId);
+    int damageOf(const Tower &t) const;   // includes the ambush bonus
+    // Targeting (also used by the renderer/UI to show what a plant would shoot).
+    bool canHit(const Tower &t, const Enemy &e) const;   // claude2-63: flyers vs ground attacks
+    bool eligible(const Tower &t, const Enemy &e, double rangePx) const;
+    const Enemy *pickTarget(const Tower &t, double rangePx) const;
+
     bool startWave();
     void update(double dt);
     bool nextMap();     // after MapCleared: next map, coins and plants reset, lives kept
-    void reset();       // back to the first map with a fresh campaign
+    void reset(int startMap = 0);   // fresh campaign (full lives), optionally from a later map
 
 signals:
     void shot(int towerType);
@@ -122,6 +165,7 @@ signals:
     void mapStarted(int mapIndex);
     void won();
     void lost();
+    void bugSound(const QString &name);   // bug_hop, bug_heal, bug_split, jackpot
 
 private:
     struct Spawner {
@@ -144,11 +188,25 @@ private:
     void updatePoison(double dt);
     bool damageEnemy(Enemy &e, double amount);   // true if it survived
     void killEnemy(Enemy &e);
+    void updateBugAbilities(double dt);          // cricket hops, mosquito heals
+    void flushPendingBugs();                     // adds bugs born mid-update (grubs)
+    void placeBug(Enemy &e);                     // x/y/angle from dist on its lane or the path
+    double routeLength(const Enemy &e) const;    // px length of its lane or the path
+    void updateSpits(double dt);                 // scorpion goo flight + stun on impact
+    struct Route { std::vector<double> segLen, segStart; double length = 0; };
+    std::vector<Route> laneRoutes_;
+    int nextLane_ = 0;
+    struct PendingBug { data::EnemyType type; double maxHp; double dist; };
+    std::vector<PendingBug> pendingBugs_;
     void applySlow(Enemy &e, double slow, double slowTime);
     void applyPoison(Enemy &e, double dps, double time);
     void updateTowers(double dt);
     void fire(Tower &t, const Enemy &target);
     void fireFlame(Tower &t);
+    void fireThorn(Tower &t);
+    void fireKernels(Tower &t);
+    double rateBoost(const Tower &t) const;      // clover aura multiplier, >= 1
+    bool stepThorn(Shot &p, double dt);
     int harvest();                               // pays out sunflower income
     void updateShots(double dt);
     bool stepHoming(Shot &p, double dt);         // true when finished

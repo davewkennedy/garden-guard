@@ -10,7 +10,7 @@ int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     // Used by QSettings to remember the sound on/off choice.
     QApplication::setOrganizationName("GardenGuard");
-    QApplication::setApplicationName("Garden Guard");
+    QApplication::setApplicationName("Garden Guard Plus");   // separate settings from the original
 
     // Hidden developer options (not listed in --help):
     //   --screenshot FILE   save an image of the window and quit
@@ -21,7 +21,9 @@ int main(int argc, char *argv[]) {
     QCommandLineOption shotOpt("screenshot", "Save a screenshot and quit.", "file");
     QCommandLineOption sceneOpt("scene", "Scene to capture.", "name", "intro");
     QCommandLineOption sizeOpt("size", "Window size WxH.", "size");
-    for (QCommandLineOption *o : {&shotOpt, &sceneOpt, &sizeOpt}) {
+    QCommandLineOption autoOpt("autopilot", "Start with the autopilot at this speed (1-3).", "speed");
+    QCommandLineOption delayOpt("delay", "Milliseconds before the screenshot.", "ms", "800");
+    for (QCommandLineOption *o : {&shotOpt, &sceneOpt, &sizeOpt, &autoOpt, &delayOpt}) {
         o->setFlags(QCommandLineOption::HiddenFromHelp);
         parser.addOption(*o);
     }
@@ -33,6 +35,7 @@ int main(int argc, char *argv[]) {
         if (wh.size() == 2) window.resize(wh[0].toInt(), wh[1].toInt());
     }
     window.show();
+    if (parser.isSet(autoOpt)) window.startAutopilot(parser.value(autoOpt).toInt());
 
     if (parser.isSet(shotOpt)) {
         const QString file = parser.value(shotOpt);
@@ -42,7 +45,7 @@ int main(int argc, char *argv[]) {
             return 2;
         }
         // Give layouts and the first frames a moment to settle, then capture.
-        QTimer::singleShot(800, &window, [&window, file] {
+        QTimer::singleShot(parser.value(delayOpt).toInt(), &window, [&window, file] {
             const bool ok = window.grab().save(file);
             std::printf("%s %s (%dx%d)\n", ok ? "saved" : "FAILED to save", qPrintable(file),
                         window.width(), window.height());

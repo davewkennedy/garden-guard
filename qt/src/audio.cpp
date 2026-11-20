@@ -132,6 +132,10 @@ QHash<QString, std::vector<Part>> recipes() {
     r["shoot_chili"] = {noise(0, F::Bandpass, 900, 0.22, 0.5, 0.02, 0.8),  // fiery whoosh
                         noise(0.02, F::Highpass, 3000, 0.12, 0.12, 0.01),
                         tone(0, O::Saw, 90, 60, 0.2, 0.12, 0.02, F::Lowpass, 400)};
+    r["shoot_rose"] = {noise(0, F::Highpass, 4200, 0.09, 0.3, 0.004),        // thorny "fwip"
+                       tone(0, O::Triangle, 900, 1500, 0.08, 0.12, 0.005)};
+    r["shoot_corn"] = {noise(0, F::Bandpass, 2200, 0.05, 0.4, 0.002, 3),      // "pop!"
+                       tone(0, O::Sine, 500, 900, 0.05, 0.2, 0.002)};
     r["harvest"] = {tone(0, O::Sine, 1047, 0, 0.12, 0.18, 0.005),          // sunflower coins
                     tone(0.08, O::Sine, 1319, 0, 0.12, 0.18, 0.005),
                     tone(0.16, O::Sine, 1568, 0, 0.2, 0.18, 0.005)};
@@ -169,6 +173,39 @@ QHash<QString, std::vector<Part>> recipes() {
     r["click"] = {tone(0, O::Sine, 1500, 0, 0.025, 0.1, 0.002)};
     r["error"] = {tone(0, O::Square, 180, 0, 0.08, 0.2, 0.005, F::Lowpass, 800),
                   tone(0.12, O::Square, 150, 0, 0.1, 0.2, 0.005, F::Lowpass, 800)};
+    // ---- Bug abilities (claude2-63) ----
+    // Cricket: two quick high "chirp-chirp" trills.
+    r["bug_hop"] = {tone(0, O::Square, 4200, 4600, 0.03, 0.05, 0.002, F::Bandpass, 4400),
+                    tone(0.045, O::Square, 4300, 4700, 0.03, 0.05, 0.002, F::Bandpass, 4400),
+                    noise(0, F::Lowpass, 600, 0.05, 0.08)};
+    // Mosquito heal: soft rising shimmer.
+    r["bug_heal"] = {tone(0, O::Sine, 660, 1320, 0.32, 0.1, 0.06),
+                     tone(0.04, O::Sine, 990, 1980, 0.28, 0.07, 0.06),
+                     noise(0, F::Highpass, 8000, 0.3, 0.03, 0.08)};
+    // Caterpillar split: wet splat.
+    r["bug_split"] = {noise(0, F::Lowpass, 700, 0.16, 0.45, 0.002, 2),
+                      tone(0, O::Sine, 220, 70, 0.14, 0.35, 0.002),
+                      noise(0.05, F::Bandpass, 1600, 0.06, 0.15, 0.002, 4)};
+    // Golden beetle: bright coin fanfare (~0.6 s).
+    {
+        std::vector<Part> fan;
+        const double notes[] = {1047, 1319, 1568, 2093};
+        for (int i = 0; i < 4; i++) {
+            fan.push_back(tone(i * 0.07, O::Square, notes[i], 0, 0.1, 0.09, 0.003, F::Lowpass, 5000));
+            fan.push_back(tone(i * 0.07, O::Sine, notes[i] * 2, 0, 0.08, 0.06, 0.003));
+        }
+        fan.push_back(tone(0.3, O::Triangle, 2093, 0, 0.3, 0.2, 0.005));
+        fan.push_back(tone(0.3, O::Triangle, 2637, 0, 0.3, 0.14, 0.005));
+        fan.push_back(noise(0.3, F::Highpass, 7000, 0.3, 0.08));
+        r["jackpot"] = fan;
+    }
+    // Boss entrance: a low, soft rumble (kept gentle for a cozy game).
+    r["boss_rumble"] = {noise(0, F::Lowpass, 160, 1.0, 0.55, 0.15, 1),
+                        tone(0, O::Sine, 55, 40, 1.0, 0.35, 0.12),
+                        tone(0.05, O::Sine, 82, 60, 0.8, 0.18, 0.1)};
+    // Scorpion spit: a short wet "ptoo" (the splat on landing reuses bug_split).
+    r["bug_spit"] = {tone(0, O::Sine, 420, 900, 0.09, 0.22, 0.003),
+                     noise(0, F::Bandpass, 1400, 0.08, 0.25, 0.002, 3)};
     return r;
 }
 

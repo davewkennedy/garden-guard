@@ -10,6 +10,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QPushButton>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QStyle>
 #include <QVBoxLayout>
@@ -61,6 +62,7 @@ QPushButton[kind="big"] { font-size: 16px; font-weight: 700; min-height: 40px; }
 #shopCost { font-weight: 700; font-size: 12px; color: #a0683c; }
 #shopCost:disabled { color: #d9480f; }
 #shopDesc { font-size: 11px; color: #64735a; }
+#nextWave { color: #24331c; font-size: 14px; font-weight: 600; }
 #shopName:disabled, #shopDesc:disabled { color: #a3ad99; }
 #shopKey {
   background: #ffffff; border: 1px solid #d6e3c6; border-radius: 6px;
@@ -112,7 +114,7 @@ void setTextIfChanged(QAbstractButton *b, const QString &text) {
 }  // namespace
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
-    setWindowTitle("Garden Guard");
+    setWindowTitle("Garden Guard+");
     setStyleSheet(STYLE);
 
     auto *central = new QWidget;
@@ -141,17 +143,53 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     QLabel *introTitle, *introText;
     QPushButton *startGame, *again;
     intro_ = buildOverlay(introTitle, introText, startGame);
-    introTitle->setText("Garden Guard");
+    introTitle->setText("Garden Guard+");
     introText->setText(QString("Bugs are marching on your house! Plant defenders beside the path to "
-                               "stop them. Earn coins for every bug and upgrade your plants. Survive "
-                               "10 waves on each of %1 gardens. Your lives carry over between them!")
+                               "stop them, and upgrade them with the coins you earn. Survive %1 waves "
+                               "in each of %2 gardens. New bugs (even flying ones!) appear as you go, "
+                               "and your lives carry over between gardens.")
+                           .arg(data::MAPS[0].waves.empty() ? data::WAVES.size() : data::MAPS[0].waves.size())
                            .arg(data::MAPS.size()));
+    {
+        // Personal best, saved between runs as map * 100 + wave.
+        const int best = QSettings().value("best", 0).toInt();
+        if (best > 0) {
+            const int m = std::min(best / 100, int(data::MAPS.size()) - 1);
+            introText->setText(introText->text() +
+                               QString("\n\n🏆 Your best: %1, wave %2").arg(data::MAPS[m].name).arg(best % 100));
+        }
+    }
     startGame->setText("Let's grow!");
     connect(startGame, &QPushButton::clicked, this, [this] {
         sfx("click");
         intro_->hide();
         centralWidget()->setFocus();
     });
+    {
+        // Saved stars, and a shortcut to the furthest map reached (with fresh lives).
+        QSettings settings;
+        int stars = 0;
+        for (int i = 0; i < int(data::MAPS.size()); i++) stars += settings.value(QString("stars/%1").arg(i), 0).toInt();
+        if (stars > 0)
+            introText->setText(introText->text() + QString("\n⭐ %1 of %2 stars earned").arg(stars).arg(3 * data::MAPS.size()));
+        const int furthest = std::min(settings.value("best", 0).toInt() / 100, int(data::MAPS.size()) - 1);
+        if (furthest > 0) {
+            auto *cont = button(QString("Continue from %1 (map %2)").arg(data::MAPS[furthest].name).arg(furthest + 1));
+            cont->setMinimumHeight(40);
+            cont->setFocusPolicy(Qt::StrongFocus);
+            if (auto *card = intro_->findChild<QFrame *>("card")) card->layout()->addWidget(cont);
+            connect(cont, &QPushButton::clicked, this, [this, furthest] {
+                sfx("click");
+                runKills_ = runPlanted_ = runShots_ = runCoins_ = 0;
+                runStars_.clear();
+                game_.reset(furthest);
+                clearView();
+                intro_->hide();
+                centralWidget()->setFocus();
+                showNewBugs();
+            });
+        }
+    }
     end_ = buildOverlay(endTitle_, endText_, again);
     again->setText("Play again");
     connect(again, &QPushButton::clicked, this, &MainWindow::playAgain);
@@ -159,15 +197,37 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     next_ = buildOverlay(nextTitle_, nextText_, nextBtn_);
     connect(nextBtn_, &QPushButton::clicked, this, &MainWindow::goToNextMap);
     next_->hide();
+    bugCard_ = buildOverlay(bugCardTitle_, bugCardText_, bugCardBtn_);
+    bugCardBtn_->setText("Got it, bring them on!");
+    connect(bugCardBtn_, &QPushButton::clicked, this, [this] {
+        sfx("click");
+        bugCard_->hide();
+        centralWidget()->setFocus();
+    });
+    bugCard_->hide();
 
     // Game events -> sounds and messages.
-    connect(&game_, &Game::shot, this, [this](int type) { sfx("shoot_" + data::TOWERS[type].id); });
-    connect(&game_, &Game::killed, this, [this] { sfx("kill"); });
+    connect(&game_, &Game::shot, this, [this](int type) { runShots_++; sfx("shoot_" + data::TOWERS[type].id); });
+    connect(&game_, &Game::killed, this, [this](int reward) { runKills_++; runCoins_ += reward; sfx("kill"); });
+    connect(&game_, &Game::placed, this, [this] { runPlanted_++; });
+    connect(&game_, &Game::bugSound, this, [this](const QString &name) { sfx(name); });   // cricket hops, splits...
+    connect(&game_, &Game::waveEnded, this, [this](int, int bonus, int harvest) { runCoins_ += bonus + harvest; });
     connect(&game_, &Game::leaked, this, [this] { sfx("leak"); });
     connect(&game_, &Game::placed, this, [this] { sfx("place"); });
     connect(&game_, &Game::upgraded, this, [this] { sfx("upgrade"); });
     connect(&game_, &Game::sold, this, [this] { sfx("sell"); });
-    connect(&game_, &Game::waveStarted, this, [this] { sfx("waveStart"); });
+    connect(&game_, &Game::waveStarted, this, [this](int wave) {
+        sfx("waveStart");
+        for (const auto &grp : game_.waves()[wave - 1].groups)
+            if (data::ENEMIES[grp.enemy].boss) {
+                board_->showToast(QString("⚠️ Boss incoming: %1 %2!")
+                                      .arg(data::ENEMIES[grp.enemy].icon, data::ENEMIES[grp.enemy].name), true);
+                break;
+            }
+        QSettings settings;
+        const int progress = game_.mapIndex * 100 + wave;
+        if (progress > settings.value("best", 0).toInt()) settings.setValue("best", progress);
+    });
     connect(&game_, &Game::waveEnded, this, [this](int wave, int bonus, int harvest) {
         sfx("waveEnd");
         QString msg = QString("Wave %1 cleared! +%2 %3").arg(wave).arg(bonus).arg(COIN);
@@ -177,12 +237,26 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
         }
         board_->showToast(msg);
     });
-    connect(&game_, &Game::mapCleared, this, [this] { sfx("win"); showMapCleared(); });
+    // Celebrate first, then show the card once the confetti has had its moment.
+    connect(&game_, &Game::mapCleared, this, [this] {
+        sfx("win");
+        board_->celebrate();
+        QTimer::singleShot(1500, this, [this] { if (game_.phase == Phase::MapCleared) showMapCleared(); });
+    });
     connect(&game_, &Game::mapStarted, this, [this](int index) {
+        mapStartLives_ = game_.lives;
         board_->showToast(QString("Map %1 of %2: %3").arg(index + 1).arg(game_.totalMaps)
                               .arg(data::MAPS[index].name));
     });
-    connect(&game_, &Game::won, this, [this] { sfx("win"); showEnd(true); });
+    // Stars first, so the cards shown afterwards can display them.
+    connect(&game_, &Game::mapCleared, this, &MainWindow::awardStars);
+    connect(&game_, &Game::won, this, &MainWindow::awardStars);
+    connect(&game_, &Game::won, this, [this] {
+        sfx("win");
+        board_->celebrate();
+        QTimer::singleShot(900, this, [this] { board_->celebrate(); });   // encore!
+        QTimer::singleShot(1800, this, [this] { if (game_.phase == Phase::Won) showEnd(true); });
+    });
     connect(&game_, &Game::lost, this, [this] { sfx("lose"); showEnd(false); });
 
     // Game loop: about 60 frames per second.
@@ -206,7 +280,7 @@ QWidget *MainWindow::buildHeader() {
     auto *h = new QHBoxLayout(header);
     h->setContentsMargins(0, 0, 0, 0);
     h->setSpacing(10);
-    h->addWidget(label("Garden Guard", "title"));
+    h->addWidget(label("Garden Guard+", "title"));
     h->addStretch(1);
     map_ = label({}, "stat");
     coins_ = label({}, "stat");
@@ -216,12 +290,17 @@ QWidget *MainWindow::buildHeader() {
     for (QLabel *l : {map_, coins_, lives_, wave_}) h->addWidget(l);
     h->addStretch(1);
 
+    autoBtn_ = button(QStringLiteral("🤖"), {}, "iconBtn");
+    autoBtn_->setToolTip("Autopilot: the AI plays the whole campaign at 2× (A)");
+    connect(autoBtn_, &QPushButton::clicked, this, [this] { sfx("click"); setAuto(!auto_); });
+    h->addWidget(autoBtn_);
+
     speedBtn_ = button({}, {}, "iconBtn");
     pauseBtn_ = button({}, {}, "iconBtn");
     soundBtn_ = button({}, {}, "iconBtn");
     speedBtn_->setToolTip("Fast forward (F)");
     pauseBtn_->setToolTip("Pause (Space)");
-    connect(speedBtn_, &QPushButton::clicked, this, [this] { sfx("click"); setSpeed(speed_ == 2 ? 1 : 2); });
+    connect(speedBtn_, &QPushButton::clicked, this, [this] { sfx("click"); setSpeed(speed_ % 3 + 1); });
     connect(pauseBtn_, &QPushButton::clicked, this, [this] { sfx("click"); setUserPaused(!userPaused_); });
     connect(soundBtn_, &QPushButton::clicked, this, [this] {
         audio_.setEnabled(!audio_.enabled());
@@ -236,23 +315,25 @@ QPushButton *MainWindow::makeShopItem(int type, int index) {
     const data::TowerDef &def = data::TOWERS[type];
     auto *b = button({}, {}, "shopItem");
     b->setCheckable(true);
-    b->setMinimumHeight(86);
-    b->setToolTip(QString("%1 (key %2)").arg(def.name).arg(index + 1));
+    b->setMinimumHeight(58);
+    // Keys 1-9, then 0 for the tenth plant.
+    const QString key = index < 9 ? QString::number(index + 1) : index == 9 ? "0" : "";
+    const bool groundOnly = def.projectile == data::Projectile::Mortar || def.projectile == data::Projectile::Flame;
+    const bool attacker = def.projectile != data::Projectile::None && def.projectile != data::Projectile::Aura;
+    b->setToolTip(QString("<b>%1</b> %2<br>%3%4").arg(def.name, key.isEmpty() ? "" : "(key " + key + ")", def.desc,
+                  !attacker ? "" : groundOnly ? "<br><i>✗ Ground only: can't hit flyers</i>"
+                                              : "<br><i>✓ Hits flyers too</i>"));
 
-    // Compact card: icon, cost and key badge on top; then the full-width name and description.
+    // Compact card (the description is in the tooltip): icon, cost and key on top, name below.
     auto *g = new QGridLayout(b);
-    g->setContentsMargins(8, 5, 8, 6);
+    g->setContentsMargins(8, 4, 8, 5);
     g->setHorizontalSpacing(6);
-    g->setVerticalSpacing(1);
-    QLabel *desc = label(def.desc, "shopDesc");
-    desc->setWordWrap(true);
+    g->setVerticalSpacing(0);
     g->addWidget(label(def.icon, "shopIcon"), 0, 0);
     g->addWidget(label(COIN + " " + QString::number(def.levels[0].cost), "shopCost"), 0, 1);
-    g->addWidget(label(QString::number(index + 1), "shopKey"), 0, 2, Qt::AlignRight | Qt::AlignTop);
+    if (!key.isEmpty()) g->addWidget(label(key, "shopKey"), 0, 2, Qt::AlignRight | Qt::AlignTop);
     g->addWidget(label(def.name, "shopName"), 1, 0, 1, 3);
-    g->addWidget(desc, 2, 0, 1, 3);
     g->setColumnStretch(1, 1);
-    g->setRowStretch(2, 1);
     for (QLabel *l : b->findChildren<QLabel *>()) l->setAttribute(Qt::WA_TransparentForMouseEvents);
 
     connect(b, &QPushButton::clicked, this, [this, type] { toggleShop(type); });
@@ -305,6 +386,29 @@ QWidget *MainWindow::buildSide() {
     actions->addWidget(tpUpgrade_, 3);
     actions->addWidget(tpSell_, 2);
     pv->addLayout(actions);
+
+    // Fire point (ambush): the plant only shoots bugs near a spot you pick.
+    tpAim_ = button(QStringLiteral("🎯 Set fire point (T)"));
+    tpAim_->setToolTip("Ambush: pick a spot in range. The plant waits for bugs near there\n"
+                       "instead of shooting the first bug it sees, and hits 30% harder.\n"
+                       "Best for splash and flame plants (mortar, chili) at busy corners.\n"
+                       "Not great for frost: a slow should reach every bug in range.");
+    pv->addWidget(tpAim_);
+    connect(tpAim_, &QPushButton::clicked, this, [this] {
+        View &view = board_->view;
+        Tower *t = game_.getTower(view.selectedId);
+        if (!t || game_.isOver()) return;
+        sfx("click");
+        if (t->hasFirePoint) {
+            game_.clearFirePoint(t->id);
+            board_->showToast("🎯 Fire point cleared: back to automatic targeting");
+        } else if (view.aimingId == t->id) {
+            view.aimingId = -1;   // second click cancels
+        } else {
+            view.aimingId = t->id;
+            board_->showToast("🎯 Click a spot inside the range circle (Esc cancels)");
+        }
+    });
     panel_->hide();
     v->addWidget(panel_);
 
@@ -335,8 +439,14 @@ QWidget *MainWindow::buildSide() {
     });
     v->addWidget(startWave_);
 
-    QLabel *hint = label(QString("Tip: pick a plant, then click a grass tile. Keys: 1–%1 plants, "
-                                 "Space pause, F speed, Esc cancel.").arg(data::TOWERS.size()), "hint");
+    // Preview of the bugs in the next wave, so you can plan your defence.
+    nextWave_ = label({}, "nextWave");
+    nextWave_->setWordWrap(true);
+    nextWave_->setAlignment(Qt::AlignCenter);
+    v->addWidget(nextWave_);
+
+    QLabel *hint = label("Tip: hover a plant for details. Keys: number keys pick plants, "
+                         "N next wave, T fire point, A autopilot, Space pause, F speed (1×/2×/3×), Esc cancel.", "hint");
     hint->setWordWrap(true);
     v->addWidget(hint);
     return side;
@@ -384,14 +494,49 @@ QWidget *MainWindow::buildOverlay(QLabel *&title, QLabel *&text, QPushButton *&b
 
 void MainWindow::resizeEvent(QResizeEvent *e) {
     QMainWindow::resizeEvent(e);
-    for (QWidget *o : {intro_, end_, next_})
+    for (QWidget *o : {intro_, end_, next_, bugCard_})
         if (o) o->setGeometry(centralWidget()->rect());
 }
 
 // ---------- loop ----------
 
 bool MainWindow::overlayOpen() const {
-    return intro_->isVisible() || end_->isVisible() || next_->isVisible();
+    return intro_->isVisible() || end_->isVisible() || next_->isVisible() || bugCard_->isVisible();
+}
+
+// Bugs that appear on this map's waves but on no earlier map get introduced.
+void MainWindow::showNewBugs() {
+    auto typesOn = [](int m) {
+        std::vector<bool> seen(data::ENEMIES.size(), false);
+        const auto &ws = data::MAPS[m].waves.empty() ? data::WAVES : data::MAPS[m].waves;
+        for (const auto &w : ws)
+            for (const auto &grp : w.groups) seen[grp.enemy] = true;
+        return seen;
+    };
+    const int m = game_.mapIndex;
+    if (m == 0) return;   // the intro card covers the first map
+    std::vector<bool> before(data::ENEMIES.size(), false);
+    for (int i = 0; i < m; i++) {
+        auto s = typesOn(i);
+        for (size_t k = 0; k < s.size(); k++) before[k] = before[k] || s[k];
+    }
+    const auto now = typesOn(m);
+    QStringList lines;
+    for (size_t k = 0; k < now.size(); k++) {
+        if (!now[k] || before[k]) continue;
+        const data::EnemyDef &d = data::ENEMIES[k];
+        QString line = QString("%1  <b>%2</b>").arg(d.icon, d.name);
+        if (d.flying) line += QStringLiteral(" <i>(flying)</i>");
+        if (!d.desc.isEmpty()) line += "<br>" + d.desc.toHtmlEscaped();
+        lines << line;
+    }
+    if (lines.isEmpty()) return;
+    bugCardTitle_->setText(lines.size() == 1 ? "New bug!" : "New bugs!");
+    bugCardText_->setTextFormat(Qt::RichText);
+    bugCardText_->setText(lines.join("<br><br>"));
+    bugCard_->show();
+    bugCard_->raise();
+    bugCardBtn_->setFocus();
 }
 
 bool MainWindow::paused() const {
@@ -403,8 +548,62 @@ void MainWindow::tick() {
     clock_.restart();
     if (!paused())
         for (int i = 0; i < speed_; i++) game_.update(dt);
+    runAutopilot();
     board_->update();
     syncUi();
+}
+
+// ---------- autopilot ----------
+
+void MainWindow::setAuto(bool on) {
+    auto_ = on;
+    setProp(autoBtn_, "on", on);   // highlighted while it's playing
+    lastThink_ = buildStart_ = -1;
+    overlayTiming_ = false;
+    if (on) {
+        setSpeed(2);
+        setUserPaused(false);
+        board_->showToast(QStringLiteral("🤖 Autopilot on: sit back and watch (A to stop)"));
+    } else {
+        board_->showToast(QStringLiteral("🤖 Autopilot off: your turn!"));
+    }
+}
+
+// Plays like the headless test in garden_simtest: decides twice per game second,
+// starts each wave after a short pause, and clicks through the map-cleared card.
+void MainWindow::runAutopilot() {
+    if (!auto_) return;
+    if (intro_->isVisible()) intro_->hide();
+    if (end_->isVisible()) {   // campaign over: hand control back
+        setAuto(false);
+        return;
+    }
+    for (QWidget *card : {next_, bugCard_}) {   // let a card show for a moment, then move on
+        if (!card->isVisible()) continue;
+        if (!overlayTiming_) { overlayClock_.start(); overlayTiming_ = true; }
+        if (overlayClock_.elapsed() > (card == bugCard_ ? 4000 : 2500)) {
+            overlayTiming_ = false;
+            if (card == next_) goToNextMap();
+            else bugCard_->hide();
+        }
+        return;
+    }
+    if (game_.isOver() || paused()) return;
+
+    // game_.time restarts on each map, hence the "<" checks.
+    if (game_.time < lastThink_ || game_.time - lastThink_ >= 0.5) {
+        lastThink_ = game_.time;
+        autopilot_.think();
+    }
+    if (game_.phase == Phase::Build) {
+        if (buildStart_ < 0 || game_.time < buildStart_) buildStart_ = game_.time;
+        if (game_.time - buildStart_ >= 2.0) {
+            game_.startWave();
+            buildStart_ = -1;
+        }
+    } else {
+        buildStart_ = -1;
+    }
 }
 
 void MainWindow::setStat(QLabel *l, const QString &text) {
@@ -436,7 +635,8 @@ void MainWindow::syncUi() {
         bool selected = view.placing == i;
         if (b->isChecked() != selected) b->setChecked(selected);
     }
-    board_->setCursor(view.placing >= 0 ? Qt::CrossCursor : Qt::ArrowCursor);
+    board_->setCursor(view.placing >= 0 || view.aimingId >= 0 ? Qt::CrossCursor : Qt::ArrowCursor);
+    if (view.aimingId >= 0 && view.aimingId != view.selectedId) view.aimingId = -1;   // selection changed
     if (view.hover) view.hover->valid = isValid(view.hover->col, view.hover->row);
 
     // Tower panel
@@ -450,6 +650,14 @@ void MainWindow::syncUi() {
         tpUpgrade_->setEnabled(!over && cost >= 0 && game_.coins >= cost);
         setTextIfChanged(tpSell_, QString("Sell · %1 %2").arg(COIN).arg(game_.sellValue(*t)));
         tpSell_->setEnabled(!over);
+        // Fire points only make sense for plants that attack.
+        const auto proj = data::TOWERS[t->type].projectile;
+        const bool canAim = proj != data::Projectile::None && proj != data::Projectile::Aura;
+        tpAim_->setVisible(canAim);
+        setTextIfChanged(tpAim_, t->hasFirePoint ? QStringLiteral("🎯 Clear fire point")
+                                 : view.aimingId == t->id ? QStringLiteral("🎯 Pick a spot… (Esc)")
+                                                           : QStringLiteral("🎯 Set fire point (T)"));
+        tpAim_->setEnabled(!over);
     } else {
         panelKey_.clear();
     }
@@ -461,11 +669,31 @@ void MainWindow::syncUi() {
                                      : QString("Start wave %1").arg(next));
     startWave_->setEnabled(game_.phase == Phase::Build && game_.wave < game_.totalWaves);
 
+    // Next wave preview: "Next: 🐜×10  🐞×4", with the boss called out.
+    QString preview;
+    if (game_.phase == Phase::Build && game_.wave < game_.totalWaves) {
+        std::vector<int> counts(data::ENEMIES.size(), 0);
+        for (const auto &grp : game_.waves()[game_.wave].groups) counts[grp.enemy] += grp.count;
+        QStringList parts;
+        bool boss = false, air = false;
+        for (size_t i = 0; i < counts.size(); i++) {
+            if (!counts[i]) continue;
+            parts << QString("%1×%2").arg(data::ENEMIES[i].icon).arg(counts[i]);
+            boss |= data::ENEMIES[i].boss;
+            air |= data::ENEMIES[i].flying;
+        }
+        preview = "Next: " + parts.join("  ");
+        if (air) preview += QStringLiteral("\n✈️ Flyers incoming: mortars and chilis can't hit them");
+        if (boss) preview += QStringLiteral("\n⚠️ Boss wave!");
+    }
+    if (nextWave_->text() != preview) nextWave_->setText(preview);
+    nextWave_->setVisible(!preview.isEmpty());
+
     primed_ = true;
 }
 
 void MainWindow::fillPanel(const Tower &t) {
-    QString key = QString("%1:%2:%3").arg(t.id).arg(t.type).arg(t.level);
+    QString key = QString("%1:%2:%3:%4").arg(t.id).arg(t.type).arg(t.level).arg(t.hasFirePoint);
     if (key == panelKey_) return;
     panelKey_ = key;
     const data::TowerDef &def = data::TOWERS[t.type];
@@ -484,11 +712,21 @@ void MainWindow::fillPanel(const Tower &t) {
         row("Income", QString("+%1 %2 per wave").arg(lv.income).arg(COIN));
         return;
     }
-    row("Damage", QString::number(lv.damage));
+    if (def.projectile == data::Projectile::Aura) {
+        row("Range", QString::number(lv.range) + " tiles");
+        row("Boost", QString("+%1% fire rate to nearby plants").arg(qRound(lv.boost * 100)));
+        return;
+    }
+    row("Damage", t.hasFirePoint ? QString("%1 (🎯 +%2%)").arg(game_.damageOf(t)).arg(qRound((AMBUSH_BONUS - 1) * 100))
+                                 : QString::number(lv.damage));
+    const bool groundOnly = def.projectile == data::Projectile::Mortar || def.projectile == data::Projectile::Flame;
+    row("Air", groundOnly ? QStringLiteral("✗ ground only") : QStringLiteral("✓ hits flyers"));
     row("Range", QString::number(lv.range) + " tiles");
     row("Fire rate", QString::number(lv.rate) + "/s");
     if (lv.slow > 0) row("Slow", QString("%1% for %2s").arg(qRound(lv.slow * 100)).arg(lv.slowTime));
     if (lv.splash > 0) row("Splash", QString::number(lv.splash) + " tiles");
+    if (lv.pierce > 0) row("Pierce", QString("%1 bugs").arg(lv.pierce));
+    if (lv.shots > 0) row("Volley", QString("%1 targets").arg(lv.shots));
     if (lv.poisonDps > 0) row("Poison", QString("%1/s for %2s").arg(lv.poisonDps).arg(lv.poisonTime));
     if (def.projectile == data::Projectile::Flame)
         row("Spread", QString("%1° cone").arg(qRound(data::FLAME_HALF_ANGLE * 2 * 180 / M_PI)));
@@ -528,6 +766,15 @@ void MainWindow::onHover(int col, int row) {
 void MainWindow::onClick(int col, int row) {
     View &view = board_->view;
     if (overlayOpen() || game_.isOver()) return;
+    if (view.aimingId >= 0) {
+        // Choosing a fire point: the center of the clicked tile, which must be in range.
+        const double x = col * data::TILE + data::TILE / 2.0, y = row * data::TILE + data::TILE / 2.0;
+        if (!game_.setFirePoint(view.aimingId, x, y)) { fail("Out of range: pick a spot inside the circle"); return; }
+        sfx("place");
+        board_->showToast("🎯 Ambush set! This plant now waits for bugs at that spot.");
+        view.aimingId = -1;
+        return;
+    }
     if (view.placing >= 0) {
         const int cost = data::TOWERS[view.placing].levels[0].cost;
         if (!game_.canPlace(col, row)) { fail("Can't plant there"); return; }
@@ -549,19 +796,30 @@ void MainWindow::keyPressEvent(QKeyEvent *e) {
     View &view = board_->view;
     switch (e->key()) {
     case Qt::Key_Escape:
-        if (view.placing >= 0) view.placing = -1;
+        if (view.aimingId >= 0) view.aimingId = -1;
+        else if (view.placing >= 0) view.placing = -1;
         else view.selectedId = -1;
         return;
     case Qt::Key_Space:
         if (!e->isAutoRepeat()) { sfx("click"); setUserPaused(!userPaused_); }
         return;
     case Qt::Key_F:
-        if (!e->isAutoRepeat()) { sfx("click"); setSpeed(speed_ == 2 ? 1 : 2); }
+        if (!e->isAutoRepeat()) { sfx("click"); setSpeed(speed_ % 3 + 1); }
+        return;
+    case Qt::Key_N:   // start the next wave
+        if (!e->isAutoRepeat() && game_.startWave()) sfx("click");
+        return;
+    case Qt::Key_T:   // fire point for the selected plant (same as the 🎯 button)
+        if (!e->isAutoRepeat() && view.selectedId >= 0 && tpAim_->isVisible() && tpAim_->isEnabled())
+            tpAim_->click();
+        return;
+    case Qt::Key_A:   // autopilot
+        if (!e->isAutoRepeat()) { sfx("click"); setAuto(!auto_); }
         return;
     default:
         break;
     }
-    const int n = e->key() - Qt::Key_1;
+    const int n = e->key() == Qt::Key_0 ? 9 : e->key() - Qt::Key_1;
     if (!e->isAutoRepeat() && n >= 0 && n < int(data::TOWERS.size())) {
         toggleShop(n);
         return;
@@ -580,9 +838,9 @@ void MainWindow::setUserPaused(bool on) {
 }
 
 void MainWindow::setSpeed(int s) {
-    speed_ = s == 2 ? 2 : 1;
-    speedBtn_->setText(speed_ == 2 ? QStringLiteral("2×") : QStringLiteral("1×"));
-    setProp(speedBtn_, "on", speed_ == 2);
+    speed_ = std::clamp(s, 1, 3);
+    speedBtn_->setText(QString("%1×").arg(speed_));
+    setProp(speedBtn_, "on", speed_ > 1);
 }
 
 void MainWindow::syncSoundButton() {
@@ -597,7 +855,12 @@ void MainWindow::clearView() {
     View &view = board_->view;
     view.placing = -1;
     view.selectedId = -1;
+    view.aimingId = -1;
     view.hover.reset();
+}
+
+static QString starsText(int n) {
+    return QString(n, QChar(0x2605)) + QString(3 - n, QChar(0x2606));   // ★★☆
 }
 
 static QString livesText(int lives) {
@@ -612,17 +875,45 @@ void MainWindow::showEnd(bool won) {
                           : QString("You reached wave %1 of %2 on %3 (map %4 of %5).")
                                 .arg(game_.wave).arg(game_.totalWaves).arg(game_.map().name)
                                 .arg(game_.mapIndex + 1).arg(game_.totalMaps));
+    QStringList starLines;
+    int total = 0;
+    for (size_t i = 0; i < runStars_.size(); i++) {
+        starLines << QString("%1 %2").arg(data::MAPS[i].name, starsText(runStars_[i]));
+        total += runStars_[i];
+    }
+    if (!starLines.isEmpty())
+        endText_->setText(endText_->text() + QString("\n\n%1\n%2 of %3 stars")
+                                                 .arg(starLines.join("\n")).arg(total).arg(3 * game_.totalMaps));
+    endText_->setText(endText_->text() +
+                      QString("\n\n🐜 %1 bugs squashed   🌱 %2 plants planted\n🎯 %3 shots fired   %4 %5 coins earned")
+                          .arg(runKills_).arg(runPlanted_).arg(runShots_).arg(COIN).arg(runCoins_));
     end_->show();
     end_->raise();
     end_->findChild<QPushButton *>()->setFocus();
 }
 
+static int starsFor(int livesLost) {
+    return livesLost <= 0 ? 3 : livesLost <= 3 ? 2 : 1;
+}
+
+void MainWindow::awardStars() {
+    const int stars = starsFor(mapStartLives_ - game_.lives);
+    runStars_.push_back(stars);
+    QSettings settings;
+    const QString key = QString("stars/%1").arg(game_.mapIndex);
+    if (stars > settings.value(key, 0).toInt()) settings.setValue(key, stars);
+}
+
 void MainWindow::showMapCleared() {
     clearView();
     const data::MapDef &next = data::MAPS[game_.mapIndex + 1];
-    nextTitle_->setText(QString("%1 cleared!").arg(game_.map().name));
-    nextText_->setText(QString("You kept %1. Next up: %2. %3\n\n"
+    const int stars = starsFor(mapStartLives_ - game_.lives);
+    nextTitle_->setText(QString("%1 cleared!\n%2").arg(game_.map().name, starsText(stars)));
+    nextText_->setText(QString("%1\nYou kept %2. Next up: %3. %4\n\n"
                                "Your coins and plants reset for the new garden, but your lives carry over.")
+                           .arg(stars == 3 ? QStringLiteral("Flawless: not a single bug got through!")
+                                           : QString("%1 lost here (lose none for ★★★).")
+                                                 .arg(livesText(mapStartLives_ - game_.lives)))
                            .arg(livesText(game_.lives)).arg(next.name).arg(next.blurb));
     nextBtn_->setText(QString("On to %1").arg(next.name));
     next_->show();
@@ -635,23 +926,40 @@ void MainWindow::goToNextMap() {
     game_.nextMap();
     clearView();
     setUserPaused(false);
-    setSpeed(1);
+    if (!auto_) setSpeed(1);   // the autopilot keeps its speed
     next_->hide();
     primed_ = false;   // new coins total shouldn't "bump"
     centralWidget()->setFocus();
+    showNewBugs();
 }
 
 // ---------- screenshot scenes ----------
 
-bool MainWindow::setupScene(const QString &scene) {
-    if (scene == "intro") return true;
-    const QStringList known = {"play", "placing", "mapclear", "win", "lose"};
+bool MainWindow::setupScene(const QString &scene_) {
+    if (scene_ == "intro") return true;
+    // A trailing digit picks the map: "bugs3" = the bugs scene on map 3.
+    QString scene = scene_;
+    int targetMap = 0;
+    if (!scene.isEmpty() && scene.back().isDigit()) {
+        targetMap = std::clamp(scene.back().digitValue() - 1, 0, game_.totalMaps - 1);
+        scene.chop(1);
+    }
+    const QStringList known = {"play", "placing", "mapclear", "win", "lose", "night", "celebrate", "bugs",
+                               "aim", "newbugs"};
     if (!known.contains(scene)) return false;
     intro_->hide();
 
     // A busy mid-game board: one of every plant, bugs on the path, a tower selected.
     // Signals are blocked so setting it up makes no sounds or toasts.
     QSignalBlocker quiet(&game_);
+    if (scene == "night")
+        for (int i = 0; i < int(data::MAPS.size()); i++)
+            if (data::MAPS[i].night) targetMap = i;
+    if (scene == "newbugs" && targetMap == 0) targetMap = 1;
+    while (game_.mapIndex < targetMap) {
+        game_.phase = Phase::MapCleared;
+        game_.nextMap();
+    }
     game_.coins = 5000;
     auto plant = [this](const char *id, int col, int row, int upgrades) {
         for (int i = 0; i < int(data::TOWERS.size()); i++) {
@@ -667,23 +975,34 @@ bool MainWindow::setupScene(const QString &scene) {
     const int selected = plant("sprout", 1, 2, 2);
     plant("frost", 3, 3, 1);
     plant("mortar", 4, 4, 0);
-    plant("cactus", 8, 4, 2);
+    const int cactus = plant("cactus", 8, 4, 2);
+    if (scene == "aim") game_.setFirePoint(selected, 2 * 64 + 32, 4 * 64 + 32);   // sprout ambush
     plant("mushroom", 3, 5, 1);
     plant("chili", 5, 5, 2);
     plant("sunflower", 0, 8, 1);
     game_.coins = 1234;
-    game_.wave = 6;
-    game_.startWave();
-    for (int i = 0; i < 60 * 9; i++) game_.update(1.0 / 60);
+    // "bugs" stages the final wave, where every new bug type shows up.
+    game_.wave = scene == "bugs" ? game_.totalWaves - 1 : std::min(3, game_.totalWaves - 1);    game_.startWave();
+    for (int i = 0; i < 60 * (scene == "bugs" ? 24 : 9); i++) game_.update(1.0 / 60);
 
-    if (scene == "play") {
+    if (scene == "celebrate") {
+        // Fire the confetti shortly before the screenshot (taken at 800ms) so it's mid-air.
+        QTimer::singleShot(300, this, [this] { board_->celebrate(); });
+    } else if (scene == "aim") {
+        // The cactus is choosing a fire point; the sprout already has one.
+        board_->view.selectedId = cactus;
+        board_->view.aimingId = cactus;
+        board_->view.hover = View::Hover{10, 5, true};
+    } else if (scene == "play" || scene == "night" || scene == "bugs") {
         board_->view.selectedId = selected;
-        board_->showToast(QString("Wave 6 cleared! +50 %1  ·  Sunflowers +28 %1").arg(COIN));
+        board_->showToast(QString("Wave %1 cleared! +40 %2  ·  Sunflowers +28 %2").arg(game_.wave - 1).arg(COIN));
     } else if (scene == "placing") {
         board_->view.placing = 4;   // mushroom
         onHover(7, 4);
     } else if (scene == "mapclear") {
         showMapCleared();
+    } else if (scene == "newbugs") {
+        showNewBugs();
     } else {
         showEnd(scene == "win");
     }
@@ -692,6 +1011,8 @@ bool MainWindow::setupScene(const QString &scene) {
 }
 
 void MainWindow::playAgain() {
+    runKills_ = runPlanted_ = runShots_ = runCoins_ = 0;
+    runStars_.clear();
     game_.reset();
     clearView();
     setUserPaused(false);

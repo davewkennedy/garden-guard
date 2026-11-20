@@ -3,6 +3,7 @@
 #pragma once
 
 #include "audio.h"
+#include "autopilot.h"
 #include "game.h"
 
 #include <QElapsedTimer>
@@ -25,6 +26,7 @@ public:
     // Hidden screenshot mode (see main.cpp): sets up a scene to capture.
     // Scenes: intro, play, placing, mapclear, win, lose. Returns false if unknown.
     bool setupScene(const QString &scene);
+    void startAutopilot(int speed) { setAuto(true); setSpeed(speed); }   // hidden --autopilot option
 
 protected:
     void keyPressEvent(QKeyEvent *e) override;
@@ -58,14 +60,24 @@ private:
     void playAgain();
     void fillPanel(const Tower &t);
     void setStat(QLabel *label, const QString &text);
+    void setAuto(bool on);
+    void runAutopilot();
 
     Game game_;
     Audio audio_;
+    Autopilot autopilot_{game_};   // the 🤖 AI player (declared after game_, which it uses)
     BoardWidget *board_ = nullptr;
 
     // Header
     QLabel *map_ = nullptr, *coins_ = nullptr, *lives_ = nullptr, *wave_ = nullptr;
-    QPushButton *speedBtn_ = nullptr, *pauseBtn_ = nullptr, *soundBtn_ = nullptr;
+    QPushButton *autoBtn_ = nullptr, *speedBtn_ = nullptr, *pauseBtn_ = nullptr, *soundBtn_ = nullptr;
+
+    // Autopilot state
+    bool auto_ = false;
+    double lastThink_ = -1;      // game time of the AI's last decision
+    double buildStart_ = -1;     // game time the current build phase began
+    QElapsedTimer overlayClock_; // how long the map-cleared card has been showing
+    bool overlayTiming_ = false;
 
     // Side panel
     std::vector<QPushButton *> shopItems_;
@@ -73,11 +85,23 @@ private:
     QLabel *tpIcon_ = nullptr, *tpName_ = nullptr, *tpLevel_ = nullptr;
     QFormLayout *tpStats_ = nullptr;
     QPushButton *tpUpgrade_ = nullptr, *tpSell_ = nullptr;
+    QPushButton *tpAim_ = nullptr;   // set/clear the selected plant's fire point
     QPushButton *startWave_ = nullptr;
+    QLabel *nextWave_ = nullptr;   // preview of the next wave's bugs
+
+    // Run stats for the end card (whole campaign run).
+    int runKills_ = 0, runPlanted_ = 0, runShots_ = 0, runCoins_ = 0;
+    // Star ratings: ★★★ = no lives lost on that map, ★★ = 3 or fewer, ★ = cleared.
+    int mapStartLives_ = data::START_LIVES;
+    std::vector<int> runStars_;    // stars for each map cleared this run
+    void awardStars();             // called when a map is cleared (or the campaign won)
     QString panelKey_;   // which tower/level the panel currently shows
 
     // Overlays
-    QWidget *intro_ = nullptr, *end_ = nullptr, *next_ = nullptr;
+    QWidget *intro_ = nullptr, *end_ = nullptr, *next_ = nullptr, *bugCard_ = nullptr;
+    QLabel *bugCardTitle_ = nullptr, *bugCardText_ = nullptr;
+    QPushButton *bugCardBtn_ = nullptr;
+    void showNewBugs();   // "New bugs!" card when a map introduces bug types
     QLabel *endTitle_ = nullptr, *endText_ = nullptr;
     QLabel *nextTitle_ = nullptr, *nextText_ = nullptr;
     QPushButton *nextBtn_ = nullptr;

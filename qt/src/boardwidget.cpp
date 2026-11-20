@@ -7,7 +7,9 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 namespace {
 constexpr int TOAST_MS = 1800;
@@ -37,6 +39,50 @@ void BoardWidget::hideToast() {
 void BoardWidget::setPausedBanner(bool on) {
     paused_ = on;
     update();
+}
+
+void BoardWidget::celebrate() {
+    static const char *const COLORS[] = {"#ff5a5f", "#ffc93c", "#4caf50", "#5bc0de", "#b06ad9", "#ff9f5a", "#ffffff"};
+    const QRectF r = boardRect();
+    for (int i = 0; i < 180; i++) {
+        // Two cannons at the bottom corners, aimed up and inward.
+        const bool left = i % 2 == 0;
+        const double angle = (left ? -60 : -120) + (std::rand() % 40 - 20);
+        const double speed = 500 + std::rand() % 450;
+        const double rad = angle * M_PI / 180;
+        confetti_.push_back({left ? r.left() + 20 : r.right() - 20, r.bottom() - 10,
+                             std::cos(rad) * speed, std::sin(rad) * speed,
+                             double(std::rand() % 360), double(std::rand() % 720 - 360),
+                             5.0 + std::rand() % 5, 8.0 + std::rand() % 6,
+                             QColor(COLORS[std::rand() % 7])});
+    }
+    confettiClock_.start();
+    update();
+}
+
+void BoardWidget::drawConfetti(QPainter &p) {
+    if (confetti_.empty()) return;
+    const double dt = std::min(0.05, confettiClock_.restart() / 1000.0);
+    for (auto &c : confetti_) {
+        c.vy += 900 * dt;          // gravity
+        c.vx *= 1 - 1.2 * dt;      // air drag
+        c.vy *= 1 - 0.8 * dt;
+        c.x += c.vx * dt;
+        c.y += c.vy * dt;
+        c.rot += c.spin * dt;
+        p.save();
+        p.translate(c.x, c.y);
+        p.rotate(c.rot);
+        // Squash the width with the rotation so pieces look like they flutter.
+        p.scale(std::cos(c.rot * M_PI / 90), 1);
+        p.fillRect(QRectF(-c.w / 2, -c.h / 2, c.w, c.h), c.color);
+        p.restore();
+    }
+    const double bottom = height() + 40;
+    confetti_.erase(std::remove_if(confetti_.begin(), confetti_.end(),
+                                   [bottom](const Confetto &c) { return c.y > bottom && c.vy > 0; }),
+                    confetti_.end());
+    update();   // keep animating until every piece has fallen
 }
 
 QRectF BoardWidget::boardRect() const {
@@ -73,6 +119,7 @@ void BoardWidget::paintEvent(QPaintEvent *) {
     p.scale(s, s);
     renderer_.draw(p, *game_, view, s * devicePixelRatioF());
     p.restore();
+    drawConfetti(p);
 
     // Pause banner, centered on the board.
     if (paused_) {
