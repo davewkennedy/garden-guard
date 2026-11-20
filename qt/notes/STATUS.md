@@ -2,14 +2,15 @@
 
 Maintained by claude2-f4 (tech lead). Read-only for everyone else.
 
-## Current state (updated 17:06)
-**Session A running.** Started 16:52:54, timebox 50 min, wrap-up from ~17:36, done by ~17:43.
-All Session A features are integrated and passing. Remaining time goes to polish and Session B items (terrain, more mechanics) plus QA.
+## Current state (updated 17:33)
+**Session A COMPLETE.** Started 16:52:54; feature work ended 17:32; wrap-up 17:33. Final build: 0 warnings, simtest 86/86 PASS, autopilot wins Normal with 6 lives. Final snapshot `garden-plusplus-5-final.tar`. All helpers stood down. Test save data for Garden Guard++ was cleared, so the user starts fresh.
 
 - Project: `~/projects/garden-plusplus` (copy of Garden Guard+ made 16:48; `~/projects/garden-plus` is the untouched rollback).
 - Snapshots will be saved to `~/projects/snapshots/` at each milestone.
 
 ## Team and assignments
+**Names (2026-11-20):** Hank = claude2-f4 (lead), Dale = claude2-de, Boomhauer = claude2-63, Bill = claude2-0c, Bobby = claude2-3e, Peggy = claude2-c7 (messenger). Old IDs remain in notes/<id>.md and build/<id> names.
+
 | Agent | Role | First task | Then |
 |---|---|---|---|
 | claude2-f4 | Lead | Engine refactor: per-map tile size and grid (others plan, don't edit, until it lands) | Focus fire, integration, test, summary |
