@@ -12,7 +12,9 @@ Team: Bobby (renderer.js/view.js: outer garden, path, weather, plantable cue), B
   30 shots 0 errors; glass costs nothing measurable. Snapshot immersive-4-bill-m1.
   Open: frame time 38-42 ms (iPhone, 4x throttle, 49 bugs) -> Bobby checking outer-garden caching.
 - 00:33 Bill: sw.js 23 files (ggweb-e042e79b66); pwa-check PASS (installable, offline); resume 16/16. Now on the Qt STYLE block.
-  Idea (low priority): iPad portrait side panel has a lot of empty glass below the plant panel.
+- 00:35 Hank: Qt header named #header (glass). Bill M2: Qt STYLE glass (transparent #central, frosted header/side, pills, shop states). Snapshot immersive-5-bill-qt.
+- 00:37 Bill: iPad portrait panel now fits its content (garden shows below); sw.js ggweb-41ca0fffa1. Bill idle until the final pass.
+- 00:40 Hank: final-qa.sh on the immersive source: 15/15 PASS (all sizes, strict touch E2E iphone+se, autopilot, parity exact).
 
 ----- (below: the web port board, kept for history) -----
 

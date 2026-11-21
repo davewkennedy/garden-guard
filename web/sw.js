@@ -2,7 +2,7 @@
 // has been opened over https it also plays with no signal.
 // FILES and CACHE are generated: run `bash tools/make-sw-list.sh` after changing the game. It lists every
 // file index.html loads and sets CACHE to a content hash, so phones pick up each new version.
-const CACHE = 'ggweb-e042e79b66';
+const CACHE = 'ggweb-41ca0fffa1';
 const FILES = [
   "./",
   "index.html",

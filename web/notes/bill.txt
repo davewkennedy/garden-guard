@@ -75,3 +75,4 @@ PAUSED for the usage window. Next: wait for Hank's layout + link, then shots (6 
   #header [Hank named it] + #side rgba(248,252,242,215) with a green hairline, #side green top band; translucent pills, buttons, shop states;
   disabled primary readable; lighter overlay, near-opaque card). Builds clean in build/0c (Release). Shots: shots/immersive/qt-map{1,3,6,9}.png, qt-intro.png.
   Outside the board is still the plain window background in Qt (outer garden is not mine).
+00:36 iPad portrait: panel hugs its content (immersive.css portrait block: #side/#sideBody flex 0 1 auto). Side ends at y=987-1048 of 1180 (5 scenes, 0 overflow, 0 errors); garden shows below. Shots v2-ipad-portrait-*.png. sw.js regenerated: 23 files, ggweb-41ca0fffa1. IDLE until Hank's final pass.

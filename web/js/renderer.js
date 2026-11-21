@@ -956,16 +956,29 @@ var Renderer = (function () {
         return pm;
     }
 
+    // The outer garden is kept as 512 px tiles: drawing a strip of one big image while the board's
+    // hi-res background is also drawn thrashed Chrome's image cache (~40 ms a frame at zoom >= 1.8
+    // on a throttled phone); with tiles a frame only touches the few it shows.
+    var OTILE = 512;
+    function tileImage(img) {
+        var tiles = [];
+        for (var ty = 0; ty < img.height; ty += OTILE) for (var tx = 0; tx < img.width; tx += OTILE) {
+            var w = Math.min(OTILE, img.width - tx), h = Math.min(OTILE, img.height - ty);
+            var t = newCanvas(w, h);
+            t.getContext('2d').drawImage(img, tx, ty, w, h, 0, 0, w, h);
+            tiles.push({ img: t, x: tx, y: ty, w: w, h: h });
+        }
+        return { width: img.width, height: img.height, tiles: tiles };
+    }
     var outer = null, outerKey = '', outerRect = null, outerRes = 0, outerBuiltAt = -1;
-    // A sharper copy for zoomed-in views, built once while the zoom is still (like bgHi): scaling
-    // the low-res one up 2-4x mid-pinch is slow in software canvases.
-    var outerHi = null, outerHiRes = 0, outerHiDue = Infinity;
     function setupOuter(game, view, now) {
         var O = outerRectFor(view);
-        var res = Math.max(0.25, Math.min(loRes || 1, Math.sqrt(6e6 / (O.w * O.h))));
+        // 2x the fit resolution (within ~6 Mpx): software canvases hit a slow path (~40 ms on a
+        // throttled phone) when an image is scaled up more than ~1.5x, which a pinch would do.
+        var res = Math.max(0.25, Math.min((loRes || 1), Math.sqrt(6e6 / (O.w * O.h))));
         res = Math.round(res * 4) / 4 || 0.25;
         var key = game.mapIndex + '|' + W + 'x' + H + '|' + O.c0 + ',' + O.r0 + ',' + O.c1 + ',' + O.r1 + '|' + res + '|' + CUE;
-        if (key === outerKey) { setupOuterHi(game, view, now, O); return; }
+        if (key === outerKey) return;
         // While a window is being dragged, rebuild at most every 0.15 s (gaps show grass color).
         var covers = outer && outerRect && outerKey.split('|')[0] === String(game.mapIndex) &&
                      outerRect.c0 <= O.c0 && outerRect.r0 <= O.r0 && outerRect.c1 >= O.c1 && outerRect.r1 >= O.r1;
@@ -976,18 +989,9 @@ var Renderer = (function () {
             try { built = buildOuter(game, O, s); outerRes = s; }
             catch (e) { if (s <= 0.25) { built = null; break; } }
         }
+        if (built) built = tileImage(built);
         outer = built; outerRect = O; outerKey = key; outerBuiltAt = now;
-        outerHi = null; outerHiRes = 0; outerHiDue = now + 0.6;
     }
-    function setupOuterHi(game, view, now, O) {
-        if (outerHi || !outer || now < outerHiDue || now - scaleChangedAt < 0.3) return;
-        outerHiDue = Infinity;   // one attempt per outer build
-        var want = Math.min(bgStepFor(view.fit * view.dpr * 4), Math.sqrt(4e6 / (O.w * O.h)));
-        want = Math.floor(want * 4) / 4;
-        if (want < outerRes * 1.4) return;
-        try { outerHi = buildOuter(game, O, want); outerHiRes = want; } catch (e) { outerHi = null; }
-    }
-
     // Screen-space vignette over the whole garden (it was baked into the board before).
     var vigKey = '', vigGrad = null;
     function drawVignette(p, g, view) {
@@ -1989,13 +1993,26 @@ var Renderer = (function () {
         if (outer && !DBG.noOuter) {
             // Only the strips around the board (never under it): blitting the whole screen from a
             // low-res image scaled up 4x cost ~30 ms a frame on a throttled phone at zoom 4.
-            var oimg = outerHi && s * dpr > outerRes * 1.4 ? outerHi : outer;
-            var O = outerRect, ok_ = oimg.width / O.w, e = 1;   // 1 px overlap under the board edge
-            [[wx0, wy0, wx1, 0 + e], [wx0, H - e, wx1, wy1], [wx0, 0, 0 + e, H], [W - e, 0, wx1, H]].forEach(function (q) {
+            var oimg = outer;
+            var O = outerRect, ok_ = oimg.width / O.w;
+            // Strips outside the board (a strip under half a screen px is skipped).
+            var minW = 0.5 / s;
+            [[wx0, wy0, wx1, 0], [wx0, H, wx1, wy1], [wx0, 0, 0, H], [W, 0, wx1, H]].forEach(function (q) {
                 var ux0 = Math.max(O.x, q[0]), uy0 = Math.max(O.y, q[1]);
                 var ux1 = Math.min(O.x + O.w, q[2]), uy1 = Math.min(O.y + O.h, q[3]);
-                if (ux1 - ux0 < 0.01 || uy1 - uy0 < 0.01) return;
-                ctx.drawImage(oimg, (ux0 - O.x) * ok_, (uy0 - O.y) * ok_, (ux1 - ux0) * ok_, (uy1 - uy0) * ok_, ux0, uy0, ux1 - ux0, uy1 - uy0);
+                if (ux1 - ux0 < minW || uy1 - uy0 < minW) return;
+                // Whole source pixels, growing outward (the board covers any overlap); the edges that
+                // touch the board grow 1 source px under it so no seam shows.
+                var sx0 = Math.floor((ux0 - O.x) * ok_), sy0 = Math.floor((uy0 - O.y) * ok_);
+                var sx1 = Math.ceil((ux1 - O.x) * ok_), sy1 = Math.ceil((uy1 - O.y) * ok_);
+                if (q[2] === 0) sx1++; if (q[0] === W) sx0--; if (q[3] === 0) sy1++; if (q[1] === H) sy0--;
+                sx0 = Math.max(0, sx0); sy0 = Math.max(0, sy0); sx1 = Math.min(oimg.width, sx1); sy1 = Math.min(oimg.height, sy1);
+                if (sx1 <= sx0 || sy1 <= sy0) return;
+                oimg.tiles.forEach(function (t) {
+                    var ix0 = Math.max(sx0, t.x), iy0 = Math.max(sy0, t.y), ix1 = Math.min(sx1, t.x + t.w), iy1 = Math.min(sy1, t.y + t.h);
+                    if (ix1 <= ix0 || iy1 <= iy0) return;
+                    ctx.drawImage(t.img, ix0 - t.x, iy0 - t.y, ix1 - ix0, iy1 - iy0, O.x + ix0 / ok_, O.y + iy0 / ok_, (ix1 - ix0) / ok_, (iy1 - iy0) / ok_);
+                });
             });
         }
         var vx0 = Math.max(0, wx0), vy0 = Math.max(0, wy0), vx1 = Math.min(W, wx1), vy1 = Math.min(H, wy1);
@@ -2038,7 +2055,8 @@ var Renderer = (function () {
         isCelebrating: function () { return confetti.length > 0 || pendingBurst; },
         // Exposed for tests/QA.
         _fx: function () { return { FX_UI: FX_UI, FX_PLANT: FX_PLANT, FX_BUG: FX_BUG, res: res_, bgRes: bgRes }; },
-        _dbg: null,   // QA: {noOuter, noVig, noWeather}
+        _dbg: null,
+        _resetOuter: function () { outerKey = ''; outer = null; },   // QA: {noOuter, noVig, noWeather}
     };
     return R_;
 })();

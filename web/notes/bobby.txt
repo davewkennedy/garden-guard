@@ -57,3 +57,11 @@ M1 (immersive web, working): view.js setSafeRect/safeRect (board fits + clamps i
   extensions). Weather/fireflies/wind over the whole garden rect (culled to the view). Vignette now screen-space.
   Cue (?cue=0..3, default 1): outer slightly desaturated/darker + soft shade off the board edge; 2 = thin light border.
   Shots: shots/immersive/bobby/. Script: scratchpad qa/imm.js (+clip/js options).
+M2 (perf, all maps/sizes): 4x throttle, iPhone dpr 2, map 10 wave 4, Renderer.draw avg:
+  zoom1 5.2 / zoom4 3.4 / pinch 4.4 (max 13) ms; the pre-immersive build was 4.8 / 2.8 / 4.4.
+  Two fixes: (1) blit only the strips around the board, never under it; (2) the outer image is kept
+  as 512 px tiles. One big outer image drawn in the same frame as the board's hi-res bg (zoom >= 1.8)
+  thrashed Chrome's image cache: a flat ~40 ms a frame. With tiles a frame touches only the ones it shows.
+  The whole headless frame is ~64 ms vs 45 before (compositing of the full-screen canvas + glass DOM, not draw).
+  Shots c-* for maps 1-10 across pc/iphone/android/ipad/ipadP/se/wide, plus zoom 2/4: shots/immersive/bobby/. 0 errors.
+  QA hooks: Renderer._dbg = {noOuter, noVig, noWeather}; Renderer._resetOuter().

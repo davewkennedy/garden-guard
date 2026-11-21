@@ -104,6 +104,13 @@ button.primary:disabled { background: rgba(196, 224, 192, .85); color: #4f7a4c; 
   .card { -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 }
 
+/* ---- Tablets upright (portrait.css layout): the panel hugs its content (wave button right under the
+   plant panel) instead of stretching to the bottom, so the garden shows below it. ---- */
+@media (orientation: portrait) and (min-width: 600px) {
+  #side { flex: 0 1 auto; }
+  #sideBody { flex: 0 1 auto; }
+}
+
 /* ---- No backdrop-filter (Firefox < 103, old WebViews): same look, more opaque fills. ---- */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root { --glass: rgba(246, 250, 240, .93); --glass-strong: rgba(250, 253, 246, .97);
