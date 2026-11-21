@@ -6,6 +6,8 @@ Team: Bobby (renderer.js/view.js: outer garden, path, weather, plantable cue), B
 - 00:25 Hank: canvas full screen behind panels, pointer-events fall-through, View.setSafeRect wired (Bobby). Touch QA 10/10. Tests measure #boardWrap.
 - 00:28 Hank: Qt layout in ~/projects/garden-immersive: BoardWidget fills the window behind header/side (src/immersive.cpp, ImmersiveLayout),
   empty boardSlot in the layout -> BoardWidget::setSafeRect; board centered in the slot. Builds clean (build/lead). Outer garden + glass NOT yet in Qt.
+- 00:28 Bobby M1: web outer garden (grass/decor/season/night), path off-screen both ends (incl. path2), full-screen weather/wind,
+  plantable cue = outer garden duller+darker with soft falloff (?cue=0/2/3 to compare). 0 errors at 5 sizes. Snapshot immersive-3-bobby-m1.
 
 ----- (below: the web port board, kept for history) -----
 

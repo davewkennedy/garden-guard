@@ -36,15 +36,15 @@
 .stat.low { background: rgba(255, 236, 232, .9); }
 
 /* Buttons on glass: translucent white, crisp edge; the coloured ones (primary/danger) stay solid. */
-#header button, #side button:not(.primary):not(.danger), .card button:not(.primary):not(.danger) {
+#header button, #side button:not(.primary):not(.danger), .card button:not(.primary):not(.danger):not([aria-pressed="true"]) {
   background: var(--glass-chip); border-color: rgba(47, 90, 40, .24); }
 #header button:hover:not(:disabled), #side button:not(.primary):not(.danger):hover:not(:disabled),
-.card button:not(.primary):not(.danger):hover:not(:disabled) { background: rgba(255, 255, 255, .85); }
+.card button:not(.primary):not(.danger):not([aria-pressed="true"]):hover:not(:disabled) { background: rgba(255, 255, 255, .85); }
 #header button:active:not(:disabled), #side button:not(.primary):not(.danger):active:not(:disabled),
-.card button:not(.primary):not(.danger):active:not(:disabled) { background: rgba(230, 239, 218, .95); }
-#side button:not(.primary):not(.danger):disabled, .card button:not(.primary):not(.danger):disabled {
+.card button:not(.primary):not(.danger):not([aria-pressed="true"]):active:not(:disabled) { background: rgba(230, 239, 218, .95); }
+#side button:not(.primary):not(.danger):disabled, .card button:not(.primary):not(.danger):not([aria-pressed="true"]):disabled {
   background: rgba(243, 246, 238, .45); color: #8f9a85; }
-.iconBtn.on, #header .iconBtn.on { background: rgba(255, 243, 196, .95); border-color: var(--gold); }
+.iconBtn.on, #header button.iconBtn.on { background: rgba(255, 243, 196, .95); border-color: var(--gold); }
 button.primary { box-shadow: 0 1px 0 rgba(255,255,255,.35) inset, 0 2px 6px rgba(30, 90, 35, .25); }
 /* Disabled green buttons ("Wave 4…", "Max level"): white-on-pale-green was ~1.6:1 over snow. */
 button.primary:disabled { background: rgba(196, 224, 192, .85); color: #4f7a4c; border-color: rgba(47, 138, 58, .35);
@@ -96,10 +96,11 @@ button.primary:disabled { background: rgba(196, 224, 192, .85); color: #4f7a4c; 
    over it costs on phone GPUs: smaller radius, a bit more fill so it still reads as glass. ---- */
 @media (max-height: 560px) {
   :root { --glass: rgba(248, 252, 242, .74); --glass-blur: blur(8px) saturate(1.25); }
-  #header { border-radius: 12px; padding: 3px 4px; }
+  /* Every px counts here (phone-fit: the plant panel + 🎯 + Cancel focus must fit above the footer). */
+  #header { border-radius: 12px; padding: 1px 2px; }
   #side { border-radius: 12px; }
   #side::before { left: 10px; right: 10px; }
-  #sideFoot { padding-top: 4px; }
+  #sideFoot { border-top: none; padding-top: 0; }
   .card { -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 }
 

@@ -1973,7 +1973,8 @@ var Renderer = (function () {
         DOM = outer && outerRect ? { x: outerRect.x, y: outerRect.y, w: outerRect.w, h: outerRect.h } : { x: 0, y: 0, w: W, h: H };
         ctx.imageSmoothingQuality = 'low';
         // Only the visible parts of the outer garden and the board, with cheap (bilinear) smoothing.
-        if (outer) {
+        var DBG = R_._dbg || {};
+        if (outer && !DBG.noOuter) {
             var O = outerRect, ux0 = Math.max(O.x, wx0), uy0 = Math.max(O.y, wy0);
             var ux1 = Math.min(O.x + O.w, wx1), uy1 = Math.min(O.y + O.h, wy1);
             if (ux1 > ux0 && uy1 > uy0) {
@@ -1989,7 +1990,7 @@ var Renderer = (function () {
         ctx.imageSmoothingQuality = 'high';
         ctx.save();
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        drawVignette(ctx, game, view);
+        if (!DBG.noVig) drawVignette(ctx, game, view);
         ctx.restore();
         if (U.placing >= 0) drawGrid(ctx);
         if (U.placing >= 0 && U.hover) drawPreview(ctx, U);
@@ -1999,7 +2000,7 @@ var Renderer = (function () {
         drawEnemies(ctx, game);
         drawShots(ctx, game);
         drawEffects(ctx, game);
-        drawWeather(ctx, game);
+        if (!DBG.noWeather) drawWeather(ctx, game);
         drawFireflies(ctx, game);
 
         // Screen-space overlays (CSS px), within the part of the board inside the safe rect.
@@ -2015,13 +2016,15 @@ var Renderer = (function () {
         ctx.globalAlpha = 1;
     }
 
-    return {
+    var R_ = {
         draw: draw,
         celebrate: function () { pendingBurst = true; },   // spawned on the next draw (needs the board rect)
         isCelebrating: function () { return confetti.length > 0 || pendingBurst; },
         // Exposed for tests/QA.
         _fx: function () { return { FX_UI: FX_UI, FX_PLANT: FX_PLANT, FX_BUG: FX_BUG, res: res_, bgRes: bgRes }; },
+        _dbg: null,   // QA: {noOuter, noVig, noWeather}
     };
+    return R_;
 })();
 
 if (typeof module !== 'undefined') module.exports = Renderer;
