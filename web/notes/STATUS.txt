@@ -15,6 +15,9 @@ Team: Bobby (renderer.js/view.js: outer garden, path, weather, plantable cue), B
 - 00:35 Hank: Qt header named #header (glass). Bill M2: Qt STYLE glass (transparent #central, frosted header/side, pills, shop states). Snapshot immersive-5-bill-qt.
 - 00:37 Bill: iPad portrait panel now fits its content (garden shows below); sw.js ggweb-41ca0fffa1. Bill idle until the final pass.
 - 00:40 Hank: final-qa.sh on the immersive source: 15/15 PASS (all sizes, strict touch E2E iphone+se, autopilot, parity exact).
+- 00:48 Bobby M2: perf fixed (outer garden in 512 px tiles, strips only). Draw avg iPhone 4x throttle: 5.2/3.4/4.4 ms (zoom1/zoom4/pinch)
+  vs 4.8/2.8/4.4 before immersive. Whole-frame headless time is compositing (full-screen canvas + glass), check on a real phone.
+  All maps x 7 sizes + zoom shots in shots/immersive/bobby/c-*. Snapshot immersive-6-bobby-m2. Bobby now on the Qt port.
 
 ----- (below: the web port board, kept for history) -----
 

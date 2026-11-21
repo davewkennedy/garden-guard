@@ -65,3 +65,9 @@ M2 (perf, all maps/sizes): 4x throttle, iPhone dpr 2, map 10 wave 4, Renderer.dr
   The whole headless frame is ~64 ms vs 45 before (compositing of the full-screen canvas + glass DOM, not draw).
   Shots c-* for maps 1-10 across pc/iphone/android/ipad/ipadP/se/wide, plus zoom 2/4: shots/immersive/bobby/. 0 errors.
   QA hooks: Renderer._dbg = {noOuter, noVig, noWeather}; Renderer._resetOuter().
+M3 (Qt port, ~/projects/garden-immersive, build/3e Release, builds clean): renderer.h/.cpp: draw(..., outerWorld)
+  draws a cached outer pixmap (Renderer::buildOuter, same tile-seeded layout as web) + the board + a vignette over the
+  whole widget; board bg no longer bakes the vignette. Weather/fireflies/wind use DOM_* (the whole garden rect).
+  Cue: Qt has no 'saturation' blend, so it's a per-pixel 22% mix toward luminance, then the same dark wash + edge shade.
+  boardwidget.cpp paintEvent: no shadow/rounded clip (CORNER removed); passes the widget rect in board coords.
+  Shots: shots/immersive/bobby/qt-map{1,5,7,10}-*.png (offscreen platform, 0 errors).

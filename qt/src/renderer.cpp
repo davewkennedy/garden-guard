@@ -5,6 +5,9 @@
 
 #include <QFont>
 #include <QFontMetricsF>
+#include <QImage>
+#include <QLinearGradient>
+#include <QTransform>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRadialGradient>
@@ -587,27 +590,436 @@ QPixmap Renderer::buildBackground(const Game &game) {
         drawGlyph(g, QStringLiteral("🌙"), 40, W - 70, 60);
     }
 
-    // Soft vignette.
-    QRadialGradient vg = radial(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.68);
-    vg.setColorAt(0, rgba(20, 40, 10, 0));
-    vg.setColorAt(1, map.night                          ? rgba(0, 0, 20, 0.45)
-                     : season == data::Season::Winter ? rgba(40, 60, 90, 0.22)
-                     : season == data::Season::Autumn ? rgba(70, 35, 5, 0.24)
-                                                      : rgba(20, 40, 10, 0.22));
-    g.fillRect(QRectF(0, 0, W, H), vg);
+    // (Immersive: the vignette is drawn over the whole widget in draw(), not baked in here.)
     g.end();
     return pm;
+}
+
+// ---------- outer garden (immersive: the garden past the board, claude2-3e) ----------
+// Same look and layout as the web build (js/renderer.js buildOuter): drawn per tile with a
+// tile-seeded Rng so the layout doesn't depend on the window size, cached as one pixmap.
+
+namespace {
+
+Rng tileRng(uint32_t seed, int c, int r) {
+    uint32_t h = seed ^ (uint32_t(c + 4096) * 0x9E3779B1u) ^ (uint32_t(r + 4096) * 0x85EBCA77u);
+    h = (h ^ (h >> 16)) * 0x7FEB352Du;
+    return Rng(h ^ (h >> 15));
+}
+
+struct ExtRoute { QPointF head0, head1, tail0, tail1; const std::vector<QPointF> *pts; };
+
+std::vector<ExtRoute> extendedRoutes(const Game &game) {
+    constexpr double FAR = 8000;
+    std::vector<ExtRoute> out;
+    for (const std::vector<QPointF> *pts : {&game.path, &game.path2}) {
+        if (pts->size() < 2) continue;
+        auto away = [](const QPointF &a, const QPointF &b) {
+            double dx = a.x() - b.x(), dy = a.y() - b.y(), l = std::hypot(dx, dy);
+            if (l <= 0) l = 1;
+            return QPointF(a.x() + dx / l * FAR, a.y() + dy / l * FAR);
+        };
+        const size_t n = pts->size();
+        out.push_back({away((*pts)[0], (*pts)[1]), (*pts)[0], (*pts)[n - 1], away((*pts)[n - 1], (*pts)[n - 2]), pts});
+    }
+    return out;
+}
+
+double distToSeg(double px, double py, const QPointF &a, const QPointF &b) {
+    double dx = b.x() - a.x(), dy = b.y() - a.y(), l2 = dx * dx + dy * dy;
+    double t = l2 > 0 ? clamp01(((px - a.x()) * dx + (py - a.y()) * dy) / l2) : 0;
+    return std::hypot(px - (a.x() + dx * t), py - (a.y() + dy * t));
+}
+
+bool nearRoute(const std::vector<ExtRoute> &routes, double x, double y, double d) {
+    for (const ExtRoute &R : routes) {
+        if (distToSeg(x, y, R.head0, R.head1) < d || distToSeg(x, y, R.tail0, R.tail1) < d) return true;
+        for (size_t k = 0; k + 1 < R.pts->size(); k++)
+            if (distToSeg(x, y, (*R.pts)[k], (*R.pts)[k + 1]) < d) return true;
+    }
+    return false;
+}
+
+void drawBush(QPainter &g, double x, double y, double s, data::Season season, Rng &rand) {
+    static const char *const AUT[] = {"#b5532a", "#d9822b", "#c9a23a", "#8f4a22"};
+    static const char *const WIN[] = {"#4f7a5e", "#5f8a6c", "#6f9a7a", "#3f6a4e"};
+    static const char *const SUM[] = {"#3f8f2f", "#4fa23a", "#2f7a2a", "#5bb04a"};
+    static const char *const SPR[] = {"#4fa547", "#5cb853", "#3f9240", "#6cc25e"};
+    const char *const *greens = season == data::Season::Autumn ? AUT : season == data::Season::Winter ? WIN
+                              : season == data::Season::Summer ? SUM : SPR;
+    fillEllipse(g, x + 2, y + s * 0.55, s * 1.25, s * 0.42, 0, rgba(0, 0, 0, 0.18));
+    int n = 5 + int(rand() * 3);
+    for (int k = 0; k < n; k++) {
+        double a = double(k) / n * TAU + rand() * 0.5;
+        double d = s * (0.35 + rand() * 0.3);
+        double rr = s * (0.48 + rand() * 0.2);
+        fillCircle(g, x + std::cos(a) * d * 1.2, y + std::sin(a) * d * 0.6 - s * 0.15, rr, QColor(greens[k % 4]));
+    }
+    fillCircle(g, x, y - s * 0.3, s * 0.55, QColor(greens[1]));
+    fillCircle(g, x - s * 0.25, y - s * 0.5, s * 0.22, rgba(255, 255, 255, 0.16));
+    if (season == data::Season::Winter) {
+        drawSnowPatch(g, x, y - s * 0.55, s * 0.75, s * 0.3);
+    } else if (season == data::Season::Spring && rand() < 0.6) {
+        for (int k = 0; k < 4; k++) {
+            double bx = x + (rand() - 0.5) * s * 1.4;
+            double by = y - s * 0.2 + (rand() - 0.5) * s * 0.6;
+            double rot = rand() * TAU;
+            drawBlossom(g, bx, by, s * 0.07, rot, QColor(rand() < 0.5 ? "#ffc2d6" : "#ffffff"));
+        }
+    } else if (season == data::Season::Summer && rand() < 0.4) {
+        for (int k = 0; k < 5; k++) {
+            double bx = x + (rand() - 0.5) * s * 1.4;
+            double by = y - s * 0.2 + (rand() - 0.5) * s * 0.6;
+            fillCircle(g, bx, by, s * 0.08, QColor("#e8342c"));
+        }
+    }
+}
+
+// Whole garden rect the particles (weather, fireflies, wind) live in; the board when not immersive.
+double DOM_X = 0, DOM_Y = 0, DOM_W = 960, DOM_H = 640;
+
+}  // namespace
+
+QPixmap Renderer::buildOuter(const Game &game, int c0, int r0, int c1, int r1) {
+    const data::MapDef &map = game.map();
+    const data::Season season = map.season;
+    const QRectF O(c0 * TILE, r0 * TILE, (c1 - c0) * TILE, (r1 - r0) * TILE);
+    // Resolution: the board's, within ~8 Mpx.
+    const double res = std::min(dpr_, std::sqrt(8e6 / (O.width() * O.height())));
+    QImage img(int(std::ceil(O.width() * res)), int(std::ceil(O.height() * res)), QImage::Format_ARGB32_Premultiplied);
+    img.fill(Qt::transparent);
+    QPainter g(&img);
+    g.setRenderHint(QPainter::Antialiasing);
+    g.scale(res, res);
+    g.translate(-O.left(), -O.top());
+    const uint32_t seed = map.seed;
+    const auto routes = extendedRoutes(game);
+    auto onBoard = [](int c, int r) { return c >= 0 && r >= 0 && c < GRID_COLS && r < GRID_ROWS; };
+    QPainterPath outside;
+    outside.setFillRule(Qt::OddEvenFill);
+    outside.addRect(O);
+    outside.addRect(QRectF(0, 0, W, H));
+    const QColor grassA(map.grassA), grassB(map.grassB);
+
+    // Grass tiles (the board's checker + variation, continued outward).
+    for (int r = r0; r < r1; r++)
+        for (int c = c0; c < c1; c++) {
+            if (onBoard(c, r)) continue;
+            Rng tr = tileRng(seed, c, r);
+            QRectF tile(c * TILE, r * TILE, TILE, TILE);
+            g.fillRect(tile, ((r + c) % 2 + 2) % 2 ? grassA : grassB);
+            double v = tr();
+            g.fillRect(tile, v < 0.5 ? rgba(255, 255, 220, (0.5 - v) * 0.12) : rgba(0, 50, 0, (v - 0.5) * 0.1));
+        }
+    // Blades (~7 per tile, like the board's 1100 per 150 tiles).
+    {
+        QPainterPath dark, light;
+        for (int r = r0; r < r1; r++)
+            for (int c = c0; c < c1; c++) {
+                if (onBoard(c, r)) continue;
+                Rng br = tileRng(seed ^ 0xB1ADEu, c, r);
+                for (int i = 0; i < 7; i++) {
+                    double x = c * TILE + br() * TILE;
+                    double y = r * TILE + br() * TILE;
+                    QPainterPath &bp = br() < 0.5 ? dark : light;
+                    double lean = (br() - 0.5) * 3;
+                    double len = 3 + br() * 4;
+                    bp.moveTo(x, y);
+                    bp.lineTo(x + lean, y - len);
+                }
+            }
+        g.setBrush(Qt::NoBrush);
+        g.setPen(roundPen(rgba(40, 110, 40, 0.35), 1.2));
+        g.drawPath(dark);
+        g.setPen(roundPen(rgba(190, 240, 140, 0.35), 1.2));
+        g.drawPath(light);
+    }
+
+    // Season wash + winter frost.
+    g.save();
+    g.setClipPath(outside);
+    if (season == data::Season::Summer) g.fillRect(O, rgba(255, 225, 90, 0.07));
+    else if (season == data::Season::Autumn) g.fillRect(O, rgba(225, 130, 35, 0.08));
+    else if (season == data::Season::Winter) {
+        g.fillRect(O, rgba(215, 228, 245, 0.22));
+        QPainterPath frost[3];
+        for (int r = r0; r < r1; r++)
+            for (int c = c0; c < c1; c++) {
+                if (onBoard(c, r)) continue;
+                Rng fr = tileRng(seed ^ 0xF205u, c, r);
+                for (int i = 0; i < 5; i++) {
+                    double fx = c * TILE + fr() * TILE;
+                    double fy = r * TILE + fr() * TILE;
+                    double rad = 0.6 + fr() * 0.9;
+                    frost[std::min(2, int(fr() * 3))].addEllipse(QPointF(fx, fy), rad, rad);
+                }
+            }
+        for (int k = 0; k < 3; k++) g.fillPath(frost[k], rgba(255, 255, 255, 0.4 + k * 0.1));
+    }
+    g.restore();
+
+    // The path, continued off-screen from the entrance(s) and past the house (the whole route;
+    // the board covers its inner part, so it meets the board's path seamlessly).
+    {
+        QPainterPath ext;
+        for (const ExtRoute &R : routes) {
+            ext.moveTo(R.head0);
+            for (const QPointF &q : *R.pts) ext.lineTo(q);
+            ext.lineTo(R.tail1);
+        }
+        g.setBrush(Qt::NoBrush);
+        if (season == data::Season::Winter) {
+            g.setPen(roundPen(rgba(250, 252, 255, 0.75), TILE * 1.0));
+            g.drawPath(ext);
+        }
+        for (auto [width, color] : {std::pair{0.92, rgba(50, 35, 15, 0.22)}, std::pair{0.84, QColor("#93653b")},
+                                    std::pair{0.74, QColor("#c99a62")}, std::pair{0.40, rgba(228, 190, 135, 0.45)}}) {
+            g.setPen(roundPen(color, TILE * width));
+            g.drawPath(ext);
+        }
+        // Specks and pebbles along the visible part of each extension.
+        QPainterPath pebbles, darkSpecks, lightSpecks;
+        Rng prand(seed ^ 0x9A7E5u);
+        for (const ExtRoute &R : routes)
+            for (auto [a, b] : {std::pair{R.head0, R.head1}, std::pair{R.tail0, R.tail1}}) {
+                double L = std::hypot(b.x() - a.x(), b.y() - a.y());
+                if (L <= 0) L = 1;
+                const double ux = (b.x() - a.x()) / L, uy = (b.y() - a.y()) / L;
+                for (double d = 0; d < L; d += 9) {
+                    const double x0 = a.x() + ux * d, y0 = a.y() + uy * d;
+                    if (x0 < O.left() - TILE || y0 < O.top() - TILE || x0 > O.right() + TILE || y0 > O.bottom() + TILE) continue;
+                    const double off = (prand() - 0.5) * TILE * 0.6;
+                    const double x = x0 - uy * off, y = y0 + ux * off;
+                    const double kind = prand();
+                    if (kind < 0.08) {
+                        double rx = 2.5 + prand() * 2;
+                        double ry = 1.8 + prand() * 1.2;
+                        double rot = prand() * 3;
+                        QTransform t;
+                        t.translate(x, y);
+                        t.rotateRadians(rot);
+                        QPainterPath e;
+                        e.addEllipse(QPointF(0, 0), rx, ry);
+                        pebbles.addPath(t.map(e));
+                    } else {
+                        double sr = 0.7 + prand() * 1.5;
+                        (kind < 0.55 ? darkSpecks : lightSpecks).addEllipse(QPointF(x, y), sr, sr);
+                    }
+                }
+            }
+        g.fillPath(pebbles, QColor("#a49c90"));
+        g.fillPath(darkSpecks, rgba(120, 80, 40, 0.45));
+        g.fillPath(lightSpecks, rgba(235, 205, 160, 0.5));
+    }
+
+    // Decorations: the board's flowers/pebbles/tufts and season scatter, plus bushes and trees
+    // further out (never on the path).
+    const char *const *palette = season == data::Season::Spring ? SPRING_FLOWERS : season == data::Season::Summer ? SUMMER_FLOWERS
+                               : season == data::Season::Autumn ? AUTUMN_FLOWERS : FLOWER_COLORS;
+    struct Prop { bool tree; double x, y, s; uint32_t seed; };
+    std::vector<Prop> props;
+    for (int r = r0; r < r1; r++)
+        for (int c = c0; c < c1; c++) {
+            if (onBoard(c, r)) continue;
+            Rng dr = tileRng(seed ^ 0xDEC0u, c, r);
+            const double roll = dr();
+            const double cx = c * TILE + 12 + dr() * (TILE - 24);
+            const double cy = r * TILE + 12 + dr() * (TILE - 24);
+            if (nearRoute(routes, c * TILE + TILE / 2, r * TILE + TILE / 2, TILE * 0.75)) continue;
+            const int dist = std::max(c < 0 ? -c : c >= GRID_COLS ? c - GRID_COLS + 1 : 0,
+                                      r < 0 ? -r : r >= GRID_ROWS ? r - GRID_ROWS + 1 : 0);
+            const double big = dr();
+            if (dist >= 2 && big < 0.07) {
+                double s = 0.85 + dr() * 0.35;
+                props.push_back({true, cx, cy + 8, s, 0});
+                continue;
+            }
+            const double edgeGap = std::max({-cx, cx - W, -cy, cy - H});
+            if (dist >= 1 && big < 0.15 && edgeGap > TILE * 0.6) {
+                double s = TILE * (0.22 + dr() * 0.12);
+                uint32_t bs = uint32_t(dr() * 4294967296.0);
+                props.push_back({false, cx, cy, s, bs});
+                continue;
+            }
+            if (roll < 0.17 && season == data::Season::Winter) {
+                double rx = TILE * (0.18 + dr() * 0.14);
+                double ry = TILE * (0.1 + dr() * 0.06);
+                drawSnowPatch(g, cx, cy, rx, ry);
+            } else if (roll < 0.17) {
+                int n = 1 + int(dr() * 3);
+                for (int i = 0; i < n; i++) {
+                    double px = cx + (dr() - 0.5) * 14;
+                    double py = cy + (dr() - 0.5) * 14;
+                    QColor color(palette[int(dr() * 5)]);
+                    double frot = dr() * TAU;
+                    g.setPen(roundPen(rgba(40, 110, 40, 0.6), 1.2));
+                    g.drawLine(QPointF(px, py), QPointF(px, py + 5));
+                    for (int k = 0; k < 5; k++) {
+                        double a = frot + k * TAU / 5;
+                        fillCircle(g, px + std::cos(a) * 2.8, py + std::sin(a) * 2.8, 2.3, color);
+                    }
+                    fillCircle(g, px, py, 1.7, QColor("#ffb627"));
+                }
+            } else if (roll < 0.27) {
+                int np = 2 + int(dr() * 2);
+                for (int i = 0; i < np; i++) {
+                    double qx = cx + (dr() - 0.5) * 14;
+                    double qy = cy + (dr() - 0.5) * 10;
+                    double prx = 2.5 + dr() * 2.5;
+                    double prot = dr() * 3;
+                    fillEllipse(g, qx, qy, prx, prx * 0.7, prot, QColor("#b3ada3"));
+                    g.save();
+                    g.translate(qx, qy);
+                    g.rotate(deg(prot));
+                    g.setPen(QPen(QColor("#7d776f"), 0.8));
+                    g.setBrush(Qt::NoBrush);
+                    g.drawEllipse(QPointF(0, 0), prx, prx * 0.7);
+                    g.restore();
+                    fillCircle(g, qx - prx * 0.3, qy - prx * 0.25, prx * 0.3, rgba(255, 255, 255, 0.35));
+                }
+            } else if (roll < 0.45) {
+                g.setPen(roundPen(QColor(season == data::Season::Winter ? "#a9c9b4" : season == data::Season::Autumn ? "#a58a3a" : "#4f9a3b"), 1.6));
+                g.setBrush(Qt::NoBrush);
+                for (int k = 0; k < 5; k++) {
+                    double ba = -M_PI / 2 + (k - 2) * 0.32 + (dr() - 0.5) * 0.2;
+                    double bl = 6 + dr() * 4;
+                    QPainterPath blade(QPointF(cx, cy + 4));
+                    blade.quadTo(QPointF(cx + std::cos(ba) * bl * 0.5, cy + 4 + std::sin(ba) * bl * 0.6),
+                                 QPointF(cx + std::cos(ba) * bl, cy + 4 + std::sin(ba) * bl));
+                    g.drawPath(blade);
+                }
+            }
+            // Season scatter.
+            const double sr2 = dr();
+            const double scx = c * TILE + TILE * (0.15 + dr() * 0.7);
+            const double scy = r * TILE + TILE * (0.15 + dr() * 0.7);
+            if (season == data::Season::Spring && sr2 < 0.16) {
+                int nb = 3 + int(dr() * 4);
+                for (int i = 0; i < nb; i++) {
+                    double bx = scx + (dr() - 0.5) * TILE * 0.4;
+                    double by = scy + (dr() - 0.5) * TILE * 0.3;
+                    double brot = dr() * TAU;
+                    drawBlossom(g, bx, by, TILE * 0.03, brot, QColor(dr() < 0.6 ? "#ffc2d6" : "#fff4f8"));
+                }
+            } else if (season == data::Season::Autumn && sr2 < 0.2) {
+                int nl = 2 + int(dr() * (sr2 < 0.12 ? 6 : 2));
+                for (int i = 0; i < nl; i++) {
+                    double lx = scx + (dr() - 0.5) * TILE * 0.35;
+                    double ly = scy + (dr() - 0.5) * TILE * 0.3;
+                    double lsz = TILE * (0.06 + dr() * 0.03);
+                    double lrot = dr() * TAU;
+                    drawLeaf(g, lx, ly, lsz, lrot, QColor(LEAF_COLORS[int(dr() * 5)]));
+                }
+            } else if (season == data::Season::Winter && sr2 < 0.22) {
+                double rx = TILE * (0.22 + dr() * 0.2);
+                double ry = TILE * (0.12 + dr() * 0.08);
+                drawSnowPatch(g, scx, scy, rx, ry);
+            }
+        }
+    std::stable_sort(props.begin(), props.end(), [](const Prop &a, const Prop &b) { return a.y < b.y; });
+    for (const Prop &p : props) {
+        if (!p.tree) {
+            Rng br(p.seed);
+            drawBush(g, p.x, p.y, p.s, season, br);
+        } else {
+            const bool pine = season == data::Season::Winter || (season == data::Season::Autumn && int(p.x * 7 + p.y) % 3 == 0);
+            fillEllipse(g, p.x + 3, p.y + 26 * p.s, 26 * p.s, 8 * p.s, 0, rgba(0, 0, 0, 0.2));
+            drawGlyph(g, pine ? QStringLiteral("🌲") : QStringLiteral("🌳"), 58 * p.s, p.x, p.y);
+            if (season == data::Season::Winter) drawSnowPatch(g, p.x, p.y - 4 * p.s, 16 * p.s, 6 * p.s);
+        }
+    }
+
+    // Night: the board's wash and moon glow, continued.
+    if (map.night) {
+        g.save();
+        g.setClipPath(outside);
+        g.fillRect(O, rgba(10, 20, 60, 0.38));
+        QRadialGradient glow = radial(W - 70, 60, 0, W - 70, 60, 260);
+        glow.setColorAt(0, rgba(220, 230, 255, 0.28));
+        glow.setColorAt(1, rgba(220, 230, 255, 0));
+        g.fillRect(O, glow);
+        g.restore();
+    }
+    g.end();
+
+    // Plantable cue: the garden past the grid a little duller (like the web's canvas
+    // 'saturation' blend with 22% gray: mix toward luminance) and darker, plus a soft shade
+    // falling off the board's edge (like a slightly raised bed).
+    {
+        const QRect board = QRectF(-O.left() * res, -O.top() * res, W * res, H * res).toAlignedRect();
+        for (int y = 0; y < img.height(); y++) {
+            QRgb *row = reinterpret_cast<QRgb *>(img.scanLine(y));
+            const bool inRows = y >= board.top() && y <= board.bottom();
+            for (int x = 0; x < img.width(); x++) {
+                if (inRows && x >= board.left() && x <= board.right()) continue;
+                const QRgb px = row[x];
+                const int r = qRed(px), gg = qGreen(px), b = qBlue(px);
+                const double lum = 0.3 * r + 0.59 * gg + 0.11 * b;
+                row[x] = qRgba(int(r + (lum - r) * 0.22), int(gg + (lum - gg) * 0.22), int(b + (lum - b) * 0.22), qAlpha(px));
+            }
+        }
+    }
+    QPainter h(&img);
+    h.setRenderHint(QPainter::Antialiasing);
+    h.scale(res, res);
+    h.translate(-O.left(), -O.top());
+    h.fillPath(outside, map.night ? rgba(0, 0, 20, 0.12) : rgba(20, 35, 10, 0.12));
+    const double E = 18;
+    struct Edge { QRectF rect; QPointF a, b; };
+    for (const Edge &q : {Edge{QRectF(0, -E, W, E), QPointF(0, 0), QPointF(0, -E)},
+                          Edge{QRectF(0, H, W, E), QPointF(0, H), QPointF(0, H + E)},
+                          Edge{QRectF(-E, 0, E, H), QPointF(0, 0), QPointF(-E, 0)},
+                          Edge{QRectF(W, 0, E, H), QPointF(W, 0), QPointF(W + E, 0)}}) {
+        QLinearGradient sg(q.a, q.b);
+        sg.setColorAt(0, rgba(20, 35, 10, 0.2));
+        sg.setColorAt(1, rgba(20, 35, 10, 0));
+        h.fillRect(q.rect, sg);
+    }
+    h.end();
+    return QPixmap::fromImage(img);
+}
+
+void Renderer::setupOuter(const Game &game, const QRectF &ow) {
+    // Tiles covering the widget (+1 tile), and always at least one ring around the board.
+    const int c0 = std::min(-1, int(std::floor(ow.left() / TILE)) - 1);
+    const int r0 = std::min(-1, int(std::floor(ow.top() / TILE)) - 1);
+    const int c1 = std::max(GRID_COLS + 1, int(std::ceil(ow.right() / TILE)) + 1);
+    const int r1 = std::max(GRID_ROWS + 1, int(std::ceil(ow.bottom() / TILE)) + 1);
+    const bool same = !outer_.isNull() && outerMap_ == game.mapIndex && outerDpr_ == dpr_;
+    // Keep the current one while it still covers the widget (e.g. a window made smaller).
+    if (same && outerC0_ <= c0 && outerR0_ <= r0 && outerC1_ >= c1 && outerR1_ >= r1) return;
+    outer_ = buildOuter(game, c0, r0, c1, r1);
+    outerRect_ = QRectF(c0 * TILE, r0 * TILE, (c1 - c0) * TILE, (r1 - r0) * TILE);
+    outerC0_ = c0; outerR0_ = r0; outerC1_ = c1; outerR1_ = r1;
+    outerMap_ = game.mapIndex;
+    outerDpr_ = dpr_;
+}
+
+// Vignette over the whole garden (it was baked into the board before).
+void Renderer::drawVignette(QPainter &p, const Game &game, const QRectF &a) {
+    const data::MapDef &map = game.map();
+    const double mn = std::min(a.width(), a.height()), mx = std::max(a.width(), a.height());
+    QRadialGradient vg = radial(a.center().x(), a.center().y(), mn * 0.45, a.center().x(), a.center().y(), mx * 0.72);
+    vg.setColorAt(0, rgba(20, 40, 10, 0));
+    vg.setColorAt(1, map.night                               ? rgba(0, 0, 20, 0.45)
+                     : map.season == data::Season::Winter ? rgba(40, 60, 90, 0.24)
+                     : map.season == data::Season::Autumn ? rgba(70, 35, 5, 0.26)
+                                                          : rgba(20, 40, 10, 0.24));
+    p.fillRect(a, vg);
 }
 
 // Fireflies drifting over night maps: each follows its own slow looping path and blinks.
 void Renderer::drawFireflies(QPainter &p, const Game &g) {
     if (!g.map().night) return;
     const double t = g.time;
-    for (int i = 0; i < 28; i++) {
+    const int nf = int(std::lround(28 * std::max(1.0, (DOM_W * DOM_H) / (W * H))));   // over the whole garden
+    for (int i = 0; i < nf; i++) {
         double phase = i * 2.39996;   // golden angle spreads them out
-        double x = std::fmod(80 + i * 137.0 + 40 * std::sin(t * 0.31 + phase) + t * (6 + i % 5), W);
-        double y = std::fmod(40 + i * 89.0 + 30 * std::cos(t * 0.27 + phase * 1.3), H);
-        if (y < 0) y += H;
+        double x = std::fmod(80 + i * 137.0 + 40 * std::sin(t * 0.31 + phase) + t * (6 + i % 5), DOM_W);
+        double y = std::fmod(40 + i * 89.0 + 30 * std::cos(t * 0.27 + phase * 1.3), DOM_H);
+        if (x < 0) x += DOM_W;
+        if (y < 0) y += DOM_H;
+        x += DOM_X; y += DOM_Y;
         double blink = 0.5 + 0.5 * std::sin(t * (1.6 + (i % 7) * 0.23) + phase);
         if (blink < 0.15) continue;
         QRadialGradient glow(QPointF(x, y), 9);
@@ -627,7 +1039,8 @@ void Renderer::drawWeather(QPainter &p, const Game &g) {
     const data::Season season = g.map().season;
     if (season == data::Season::Summer) return;
     const double t = g.time;
-    const double area = (W * H) / (960.0 * 640.0);   // 1 on the default 15x10 board
+    // Immersive: over the whole garden (DOM_*), count scaled by its area (1 = default 15x10 board).
+    const double area = (DOM_W * DOM_H) / (960.0 * 640.0);
     p.save();
     p.setPen(Qt::NoPen);
     if (season == data::Season::Winter) {
@@ -635,9 +1048,10 @@ void Renderer::drawWeather(QPainter &p, const Game &g) {
         for (int i = 0; i < n; i++) {
             double phase = i * 2.39996;
             double fall = TILE * (0.3 + (i % 5) * 0.08);   // px/s, varied per flake
-            double x = std::fmod(i * 97.0 + TILE * 0.25 * std::sin(t * 0.7 + phase) + t * TILE * 0.1, W);
-            double y = std::fmod(i * 53.0 + t * fall, H + 10) - 5;
-            if (x < 0) x += W;
+            double x = std::fmod(i * 97.0 + TILE * 0.25 * std::sin(t * 0.7 + phase) + t * TILE * 0.1, DOM_W);
+            double y = std::fmod(i * 53.0 + t * fall, DOM_H + 10) - 5;
+            if (x < 0) x += DOM_W;
+            x += DOM_X; y += DOM_Y;
             double r = TILE * (0.025 + (i % 3) * 0.012);
             p.setBrush(rgba(255, 255, 255, 0.5 + 0.12 * (i % 3)));
             p.drawEllipse(QPointF(x, y), r, r);
@@ -650,9 +1064,10 @@ void Renderer::drawWeather(QPainter &p, const Game &g) {
         for (int i = 0; i < n; i++) {
             double phase = i * 2.39996;
             double x = std::fmod(i * 173.0 + t * TILE * (0.3 + (i % 4) * 0.07) +
-                                     TILE * 0.5 * std::sin(t * 0.9 + phase), W + 2 * pad) - pad;
-            double y = std::fmod(i * 71.0 + t * TILE * (0.2 + (i % 3) * 0.06), H + 2 * pad) - pad;
-            if (x < -pad) x += W + 2 * pad;
+                                     TILE * 0.5 * std::sin(t * 0.9 + phase), DOM_W + 2 * pad) - pad;
+            double y = std::fmod(i * 71.0 + t * TILE * (0.2 + (i % 3) * 0.06), DOM_H + 2 * pad) - pad;
+            if (x < -pad) x += DOM_W + 2 * pad;
+            x += DOM_X; y += DOM_Y;
             double rot = t * (1.2 + (i % 5) * 0.3) + phase;
             if (autumn) {
                 drawLeaf(p, x, y, TILE * (0.08 + (i % 3) * 0.015), rot, QColor(LEAF_COLORS[i % 5]));
@@ -1105,14 +1520,15 @@ void Renderer::drawEffects(QPainter &p, const Game &g) {
         p.setOpacity(std::min(1.0, 0.3 * ww + 0.9 * ws));
         // (claude2-3e) Few, long, fast, tapered streaks with a gentle S-curve and a slight slant,
         // so they read as gusts of wind rather than falling rain. Scaled for big boards.
-        const int n = std::max(8, int(15 * std::sqrt(g.W * g.H / (960.0 * 640.0))));
+        const int n = std::max(8, int(15 * std::sqrt(g.W * g.H / (960.0 * 640.0)) *
+                                      std::sqrt(std::max(1.0, DOM_W * DOM_H / (g.W * g.H)))));   // whole garden
         const double slant = 0.22;   // sideways drift per unit of travel
         for (int i = 0; i < n; i++) {
             const double speed = (1000 + (i * 37 % 400)) * FX_UI;
             const double len = (110 + (i * 53 % 70)) * FX_UI;
-            const double travel = std::fmod(g.time * speed + i * 397.3, g.H + len * 2) - len;
-            const double y = dir > 0 ? travel : g.H - travel;                      // head position
-            const double x = std::fmod(i * 157.7 + 40 + travel * slant, g.W);
+            const double travel = std::fmod(g.time * speed + i * 397.3, DOM_H + len * 2) - len;
+            const double y = DOM_Y + (dir > 0 ? travel : DOM_H - travel);          // head position
+            const double x = DOM_X + std::fmod(i * 157.7 + 40 + travel * slant, DOM_W);
             const double sway = std::sin(g.time * 2.2 + i * 1.7) * 10 * FX_UI;
             const QPointF head(x, y), tail(x - len * slant, y - dir * len);
             QPainterPath s(tail);
@@ -1498,12 +1914,24 @@ void Renderer::drawFirePoints(QPainter &p, const Game &g, const View &view) {
     }
 }
 
-void Renderer::draw(QPainter &p, const Game &game, const View &view, double scale) {
+void Renderer::draw(QPainter &p, const Game &game, const View &view, double scale, const QRectF &outerWorld) {
     setupScale(scale, game);
     p.setRenderHint(QPainter::Antialiasing);
     p.setRenderHint(QPainter::SmoothPixmapTransform);
     p.setOpacity(1);
+    if (!outerWorld.isEmpty()) {
+        // Immersive: the garden past the board, then the board, then a vignette over all of it.
+        setupOuter(game, outerWorld);
+        const double k = outer_.width() / outerRect_.width();
+        const QRectF vis = outerWorld.intersected(outerRect_);
+        p.drawPixmap(vis, outer_, QRectF((vis.left() - outerRect_.left()) * k, (vis.top() - outerRect_.top()) * k,
+                                         vis.width() * k, vis.height() * k));
+        DOM_X = outerRect_.left(); DOM_Y = outerRect_.top(); DOM_W = outerRect_.width(); DOM_H = outerRect_.height();
+    } else {
+        DOM_X = 0; DOM_Y = 0; DOM_W = W; DOM_H = H;
+    }
     p.drawPixmap(QRectF(0, 0, W, H), bg_, bg_.rect());
+    drawVignette(p, game, outerWorld.isEmpty() ? QRectF(0, 0, W, H) : outerWorld);
 
     if (view.placing >= 0) drawGrid(p);
     if (view.placing >= 0 && view.hover) drawPreview(p, view);

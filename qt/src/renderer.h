@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QHash>
 #include <QPixmap>
+#include <QRectF>
 #include <QString>
 #include <algorithm>
 #include <optional>
@@ -28,9 +29,21 @@ class Renderer {
 public:
     // Draws the board in logical 960x640 coordinates. `scale` is how many device
     // pixels one logical pixel covers, so cached images stay sharp at any size.
-    void draw(QPainter &p, const Game &game, const View &view, double scale);
+    // Immersive: `outerWorld` is the whole widget in board coordinates; the garden (grass,
+    // decorations, path, season, weather) is drawn over all of it, not just the board.
+    // An empty rect draws the board only.
+    void draw(QPainter &p, const Game &game, const View &view, double scale, const QRectF &outerWorld = QRectF());
 
 private:
+    // (claude2-3e) The garden past the board: cached per map, area and scale.
+    QPixmap buildOuter(const Game &game, int c0, int r0, int c1, int r1);
+    void setupOuter(const Game &game, const QRectF &outerWorld);
+    void drawVignette(QPainter &p, const Game &game, const QRectF &area);
+    QPixmap outer_;
+    QRectF outerRect_;        // world rect the outer pixmap covers
+    int outerC0_ = 0, outerR0_ = 0, outerC1_ = 0, outerR1_ = 0, outerMap_ = -1;
+    double outerDpr_ = 0;
+
     void setupScale(double scale, const Game &game);
     // Cached images. Returned by value: QPixmap copies are cheap (shared data)
     // and stay valid even when the cache grows.

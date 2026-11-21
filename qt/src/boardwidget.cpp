@@ -13,7 +13,6 @@
 
 namespace {
 constexpr int TOAST_MS = 1800;
-constexpr double CORNER = 16;
 }
 
 BoardWidget::BoardWidget(Game *game, QWidget *parent) : QWidget(parent), game_(game) {
@@ -118,17 +117,14 @@ void BoardWidget::paintEvent(QPaintEvent *) {
     const QRectF r = boardRect();
     const double s = r.width() / game_->W;
 
-    // Soft shadow, then the board clipped to rounded corners.
-    p.setPen(Qt::NoPen);
-    p.setBrush(QColor(40, 70, 20, 30));
-    p.drawRoundedRect(r.translated(0, 4), CORNER, CORNER);
+    // Immersive (claude2-3e): the garden fills the whole widget; no board shadow or rounded clip.
+    // The renderer draws in board coordinates; outerWorld is the whole widget in those coordinates.
+    if (r.isEmpty() || s <= 0) return;
     p.save();
-    QPainterPath clip;
-    clip.addRoundedRect(r, CORNER, CORNER);
-    p.setClipPath(clip);
     p.translate(r.topLeft());
     p.scale(s, s);
-    renderer_.draw(p, *game_, view, s * devicePixelRatioF());
+    const QRectF outerWorld(-r.left() / s, -r.top() / s, width() / s, height() / s);
+    renderer_.draw(p, *game_, view, s * devicePixelRatioF(), outerWorld);
     p.restore();
     drawConfetti(p);
 
