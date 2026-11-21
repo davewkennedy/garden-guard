@@ -209,7 +209,7 @@ async function touchTests(cdp) {
     check(hover && hover !== 'null', `long-press -> hover/info (UI.view.hover = ${hover})`);
     // 4) pinch zoom out->in around the board center (from the fitted view)
     await cdp.eval('View.reset()');
-    const c =await cdp.eval(`(() => { const r = document.getElementById('board').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, z: View.zoom }; })()`);
+    const c =await cdp.eval(`(() => { const r = document.getElementById('boardWrap').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, z: View.zoom }; })()`);
     const pts = d => [{ x: c.x - d, y: c.y }, { x: c.x + d, y: c.y }];
     await touch(cdp, 'touchStart', pts(30));
     for (let d = 40; d <= 130; d += 15) { await sleep(30); await touch(cdp, 'touchMove', pts(d)); }

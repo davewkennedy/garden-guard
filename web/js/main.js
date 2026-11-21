@@ -10,6 +10,7 @@
 (function main() {
   const params = new URLSearchParams(location.search);
   const canvas = document.getElementById('board');
+  const boardWrap = document.getElementById('boardWrap');   // where the board fits (immersive)
   const ctx = canvas.getContext('2d');
   const game = new Game();
   const autopilot = typeof Autopilot !== 'undefined' ? new Autopilot(game) : null;
@@ -19,13 +20,19 @@
   Input.init(canvas);
 
   // ---------- sizing ----------
-  let lastCols = -1, lastRows = -1, lastW = 0, lastH = 0, lastDpr = 0;
+  let lastCols = -1, lastRows = -1, lastW = 0, lastH = 0, lastDpr = 0, lastSafe = '';
   function resize(force) {
     const r = canvas.getBoundingClientRect();
     // Cap at 2x: on 3x phones that cuts fill cost ~55% (battery, smoothness) and looks nearly identical.
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
-    if (!force && w === lastW && h === lastH && dpr === lastDpr && game.cols === lastCols && game.rows === lastRows) return;
+    // The canvas fills the screen; the board itself fits inside #boardWrap (in canvas CSS px).
+    const b = boardWrap ? boardWrap.getBoundingClientRect() : r;
+    const safe = [Math.round(b.left - r.left), Math.round(b.top - r.top), Math.round(b.width), Math.round(b.height)];
+    const safeKey = safe.join(',');
+    if (!force && w === lastW && h === lastH && dpr === lastDpr && safeKey === lastSafe && game.cols === lastCols && game.rows === lastRows) return;
+    lastSafe = safeKey;
+    if (View.setSafeRect && safe[2] >= 2 && safe[3] >= 2) View.setSafeRect(safe[0], safe[1], safe[2], safe[3]);
     const newMap = game.cols !== lastCols || game.rows !== lastRows;
     lastW = w; lastH = h; lastDpr = dpr; lastCols = game.cols; lastRows = game.rows;
     canvas.width = Math.round(w * dpr);
@@ -35,7 +42,11 @@
   }
   window.addEventListener('resize', () => resize(true));
   window.addEventListener('orientationchange', () => setTimeout(() => resize(true), 200));
-  if (window.ResizeObserver) new ResizeObserver(() => resize(true)).observe(canvas);
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => resize(true));
+    ro.observe(canvas);
+    if (boardWrap) ro.observe(boardWrap);   // the side panel collapsing changes the board area only
+  }
 
   // ---------- URL options ----------
   const maxSpeed = Number(params.get('speed')) > 3 ? Math.min(20, Number(params.get('speed'))) : 3;

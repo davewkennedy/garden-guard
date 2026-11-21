@@ -60,3 +60,7 @@ pwa-check is installable + offline OK, the resume test is 16/16.
 Registration snippet for main.js (Hank adds it):
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol))
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+
+== IMMERSIVE (phase 1) ==
+00:10 css/immersive.css first draft written (glass header/side/shop/panel/cards, phone low-blur, no-blur fallback); not linked or tested yet.
+PAUSED for the usage window. Next: wait for Hank's layout + link, then shots (6 sizes x 4 seasons + night), 4x-throttle perf, phone/portrait checks, make-sw-list, pwa-check + resume.

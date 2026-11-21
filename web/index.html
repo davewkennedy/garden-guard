@@ -16,8 +16,12 @@
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/phone.css">
 <link rel="stylesheet" href="css/portrait.css">
+<link rel="stylesheet" href="css/immersive.css">
 </head>
 <body>
+<!-- Immersive: the garden canvas fills the whole screen behind the panels. #boardWrap (below)
+     is an empty placeholder that says where the board itself should fit (View.setSafeRect). -->
+<canvas id="board"></canvas>
 <div id="app">
   <header id="header">
     <div id="title">Garden Guard++</div>
@@ -39,7 +43,6 @@
 
   <main id="play">
     <div id="boardWrap">
-      <canvas id="board"></canvas>
       <div id="toast" class="hidden"></div>
       <div id="pausedBanner" class="hidden">Paused</div>
       <button id="btnZoomReset" class="iconBtn hidden" title="Zoom out to the whole garden">🔍</button>

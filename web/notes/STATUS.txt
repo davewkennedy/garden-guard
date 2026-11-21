@@ -1,3 +1,12 @@
+# PHASE 1: IMMERSIVE LOOK (2026-11-21, overnight, user asleep) - owner Hank
+Folders: this folder (web) + ~/projects/garden-immersive (Qt). Originals untouched. Snapshots: ~/projects/snapshots/immersive-*.tar
+Budget: ONLY the 00:20-05:20 window (no credits). Fallback wake-up 05:23. Priority: web look done+tested > snapshot > morning summary > Qt.
+Team: Bobby (renderer.js/view.js: outer garden, path, weather, plantable cue), Bill (css/immersive.css frosted panels, phone.css, sw.js), Hank (layout, main.js, tests, Qt plan).
+- 00:06 START. 00:10-00:21 planned pause (95% usage). Before shots: shots/immersive/before/.
+- 00:25 Hank: canvas full screen behind panels, pointer-events fall-through, View.setSafeRect wired (Bobby). Touch QA 10/10. Tests measure #boardWrap.
+
+----- (below: the web port board, kept for history) -----
+
 # Garden Guard++ Web — status board (owner: Hank)
 
 Start 14:29 (WSL clock). EXTENDED by 10 min for the usage-limit stall (~15:02-15:12), at the user's request:

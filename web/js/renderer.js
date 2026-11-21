@@ -652,14 +652,343 @@ var Renderer = (function () {
             drawGlyph(g, '🌙', 40, W - 70, 60, 1, res);
         }
 
-        // Soft vignette.
-        var vg = g.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.68);
-        vg.addColorStop(0, rgba(20, 40, 10, 0));
-        vg.addColorStop(1, map.night ? rgba(0, 0, 20, 0.45) : season === 'Winter' ? rgba(40, 60, 90, 0.22)
-                         : season === 'Autumn' ? rgba(70, 35, 5, 0.24) : rgba(20, 40, 10, 0.22));
-        g.fillStyle = vg;
-        g.fillRect(0, 0, W, H);
+        // (Immersive: the vignette is now drawn in screen space over the whole garden.)
         return pm;
+    }
+
+    // ---------- outer garden (immersive: the garden past the board) ----------
+    // Drawn per tile with a tile-seeded Rng, so the layout is the same whatever the screen size
+    // (a resize only adds or removes tiles at the edges). Built once per map + area, cached.
+    var CUE = 1;   // plantable-area cue: 0 none, 1 dim outer + soft edge, 2 thin border, 3 both
+    try {
+        var cm = typeof location !== 'undefined' && /[?&]cue=(\d)/.exec(location.search);
+        if (cm) CUE = +cm[1];
+    } catch (e) { /* no location */ }
+
+    function tileRng(seed, c, r) {
+        var h = (seed ^ Math.imul(c + 4096, 0x9E3779B1) ^ Math.imul(r + 4096, 0x85EBCA77)) >>> 0;
+        h = Math.imul(h ^ (h >>> 16), 0x7FEB352D) >>> 0;
+        return Rng(h ^ (h >>> 15));
+    }
+
+    // The path polylines, each extended far off the board at both ends (in its own direction).
+    var FAR = 8000;
+    function extendedRoutes(game) {
+        var out = [];
+        [game.path, game.path2 || []].forEach(function (pts) {
+            if (!pts || pts.length < 2) return;
+            function away(a, b) {   // a point FAR beyond a, coming from b
+                var dx = a.x - b.x, dy = a.y - b.y, l = Math.hypot(dx, dy) || 1;
+                return { x: a.x + dx / l * FAR, y: a.y + dy / l * FAR };
+            }
+            var n = pts.length;
+            out.push({ head: [away(pts[0], pts[1]), pts[0]], tail: [pts[n - 1], away(pts[n - 1], pts[n - 2])], pts: pts });
+        });
+        return out;
+    }
+    function distToSeg(px, py, a, b) {
+        var dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+        var t = l2 > 0 ? clamp01(((px - a.x) * dx + (py - a.y) * dy) / l2) : 0;
+        return Math.hypot(px - (a.x + dx * t), py - (a.y + dy * t));
+    }
+    function nearRoute(routes, x, y, d) {
+        for (var i = 0; i < routes.length; i++) {
+            var R = routes[i], segs = [R.head, R.tail];
+            for (var k = 0; k + 1 < R.pts.length; k++) segs.push([R.pts[k], R.pts[k + 1]]);
+            for (var s = 0; s < segs.length; s++) if (distToSeg(x, y, segs[s][0], segs[s][1]) < d) return true;
+        }
+        return false;
+    }
+
+    function drawBush(g, x, y, s, season, rand) {
+        var greens = season === 'Autumn' ? ['#b5532a', '#d9822b', '#c9a23a', '#8f4a22']
+                   : season === 'Winter' ? ['#4f7a5e', '#5f8a6c', '#6f9a7a', '#3f6a4e']
+                   : season === 'Summer' ? ['#3f8f2f', '#4fa23a', '#2f7a2a', '#5bb04a']
+                   : ['#4fa547', '#5cb853', '#3f9240', '#6cc25e'];
+        fillEllipse(g, x + 2, y + s * 0.55, s * 1.25, s * 0.42, 0, rgba(0, 0, 0, 0.18));
+        var n = 5 + Math.floor(rand() * 3);
+        for (var k = 0; k < n; k++) {
+            var a = k / n * TAU + rand() * 0.5, d = s * (0.35 + rand() * 0.3);
+            fillCircle(g, x + Math.cos(a) * d * 1.2, y + Math.sin(a) * d * 0.6 - s * 0.15, s * (0.48 + rand() * 0.2), greens[k % 4]);
+        }
+        fillCircle(g, x, y - s * 0.3, s * 0.55, greens[1]);
+        fillCircle(g, x - s * 0.25, y - s * 0.5, s * 0.22, rgba(255, 255, 255, 0.16));
+        if (season === 'Winter') drawSnowPatch(g, x, y - s * 0.55, s * 0.75, s * 0.3);
+        else if (season === 'Spring' && rand() < 0.6) {
+            for (k = 0; k < 4; k++) drawBlossom(g, x + (rand() - 0.5) * s * 1.4, y - s * 0.2 + (rand() - 0.5) * s * 0.6, s * 0.07, rand() * TAU,
+                                                rand() < 0.5 ? '#ffc2d6' : '#ffffff');
+        } else if (season === 'Summer' && rand() < 0.4) {
+            for (k = 0; k < 5; k++) fillCircle(g, x + (rand() - 0.5) * s * 1.4, y - s * 0.2 + (rand() - 0.5) * s * 0.6, s * 0.08, '#e8342c');
+        }
+    }
+
+    // World rect the outer garden must cover: everything visible at zoom 1 (zooming in only
+    // shows less, since the board's edges stop at the safe rect), plus a tile.
+    function outerRectFor(view) {
+        var s = view.safeRect ? view.safeRect() : { x: 0, y: 0, w: view.cssW, h: view.cssH };
+        var f = view.fit || 1;
+        var ox = s.x + (s.w - W * f) / 2, oy = s.y + (s.h - H * f) / 2;
+        var c0 = Math.floor(-ox / f / TILE) - 1, r0 = Math.floor(-oy / f / TILE) - 1;
+        var c1 = Math.ceil((view.cssW - ox) / f / TILE) + 1, r1 = Math.ceil((view.cssH - oy) / f / TILE) + 1;
+        c0 = Math.min(c0, -1); r0 = Math.min(r0, -1); c1 = Math.max(c1, GRID_COLS + 1); r1 = Math.max(r1, GRID_ROWS + 1);
+        return { c0: c0, r0: r0, c1: c1, r1: r1, x: c0 * TILE, y: r0 * TILE, w: (c1 - c0) * TILE, h: (r1 - r0) * TILE };
+    }
+
+    function buildOuter(game, O, res) {
+        var map = mapOf(game);
+        var season = nm('Season', map.season);
+        var pm = newCanvas(Math.ceil(O.w * res), Math.ceil(O.h * res));
+        var g = pm.getContext('2d');
+        g.scale(res, res);
+        g.translate(-O.x, -O.y);
+        var seed = map.seed >>> 0;
+        var routes = extendedRoutes(game);
+        var c, r, i, k;
+        function onBoard(c, r) { return c >= 0 && r >= 0 && c < GRID_COLS && r < GRID_ROWS; }
+        // Outer area as a path (everything but the board), for the season washes and the cue.
+        var outside = new Path2D();
+        outside.rect(O.x, O.y, O.w, O.h);
+        outside.rect(W, 0, -W, H);   // counter-wound hole (nonzero rule)
+
+        // Grass tiles (same checker + variation as the board, continued outward).
+        for (r = O.r0; r < O.r1; r++) for (c = O.c0; c < O.c1; c++) {
+            if (onBoard(c, r)) continue;
+            var tr = tileRng(seed, c, r);
+            g.fillStyle = ((r + c) % 2 + 2) % 2 ? map.grassA : map.grassB;
+            g.fillRect(c * TILE, r * TILE, TILE, TILE);
+            var v = tr();
+            g.fillStyle = v < 0.5 ? rgba(255, 255, 220, (0.5 - v) * 0.12) : rgba(0, 50, 0, (v - 0.5) * 0.1);
+            g.fillRect(c * TILE, r * TILE, TILE, TILE);
+        }
+        // Blades (~7 per tile like the board's 1100 per 150 tiles).
+        var darkBlades = new Path2D(), lightBlades = new Path2D();
+        for (r = O.r0; r < O.r1; r++) for (c = O.c0; c < O.c1; c++) {
+            if (onBoard(c, r)) continue;
+            var br = tileRng(seed ^ 0xB1ADE, c, r);
+            for (i = 0; i < 7; i++) {
+                var x = c * TILE + br() * TILE, y = r * TILE + br() * TILE;
+                var bp = br() < 0.5 ? darkBlades : lightBlades;
+                bp.moveTo(x, y);
+                bp.lineTo(x + (br() - 0.5) * 3, y - 3 - br() * 4);
+            }
+        }
+        pen(g, rgba(40, 110, 40, 0.35), 1.2, true);
+        g.stroke(darkBlades);
+        pen(g, rgba(190, 240, 140, 0.35), 1.2, true);
+        g.stroke(lightBlades);
+
+        // Season wash + winter frost.
+        g.save();
+        g.clip(outside);
+        if (season === 'Summer') { g.fillStyle = rgba(255, 225, 90, 0.07); g.fill(outside); }
+        else if (season === 'Autumn') { g.fillStyle = rgba(225, 130, 35, 0.08); g.fill(outside); }
+        else if (season === 'Winter') {
+            g.fillStyle = rgba(215, 228, 245, 0.22);
+            g.fill(outside);
+            var frost = [new Path2D(), new Path2D(), new Path2D()];
+            for (r = O.r0; r < O.r1; r++) for (c = O.c0; c < O.c1; c++) {
+                if (onBoard(c, r)) continue;
+                var fr_ = tileRng(seed ^ 0xF205, c, r);
+                for (i = 0; i < 5; i++) {
+                    var fx = c * TILE + fr_() * TILE, fy = r * TILE + fr_() * TILE, rad = 0.6 + fr_() * 0.9;
+                    var fp = frost[Math.min(2, Math.floor(fr_() * 3))];
+                    fp.moveTo(fx + rad, fy);
+                    fp.arc(fx, fy, rad, 0, TAU);
+                }
+            }
+            frost.forEach(function (fp, k) { g.fillStyle = rgba(255, 255, 255, 0.4 + k * 0.1); g.fill(fp); });
+        }
+        g.restore();
+
+        // The path, continued off-screen from the entrance(s) and past the house.
+        var ext = new Path2D();
+        routes.forEach(function (R) {
+            ext.moveTo(R.head[0].x, R.head[0].y); ext.lineTo(R.head[1].x, R.head[1].y);
+            ext.moveTo(R.tail[0].x, R.tail[0].y); ext.lineTo(R.tail[1].x, R.tail[1].y);
+        });
+        if (season === 'Winter') { pen(g, rgba(250, 252, 255, 0.75), TILE * 1.0, true); g.stroke(ext); }
+        [[0.92, rgba(50, 35, 15, 0.22)], [0.84, '#93653b'], [0.74, '#c99a62'], [0.40, rgba(228, 190, 135, 0.45)]]
+            .forEach(function (wc) { pen(g, wc[1], TILE * wc[0], true); g.stroke(ext); });
+        // Specks/pebbles along the visible part of each extension.
+        var pebbles = new Path2D(), darkSpecks = new Path2D(), lightSpecks = new Path2D();
+        var prand = Rng((seed ^ 0x9A7E5) >>> 0);
+        routes.forEach(function (R) {
+            [R.head, R.tail].forEach(function (seg) {
+                var a = seg[0], b = seg[1], L = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+                var ux = (b.x - a.x) / L, uy = (b.y - a.y) / L;
+                for (var d = 0; d < L; d += 9) {
+                    var x0 = a.x + ux * d, y0 = a.y + uy * d;
+                    if (x0 < O.x - TILE || y0 < O.y - TILE || x0 > O.x + O.w + TILE || y0 > O.y + O.h + TILE) continue;
+                    var off = (prand() - 0.5) * TILE * 0.6, x = x0 - uy * off, y = y0 + ux * off, kind = prand();
+                    if (kind < 0.08) {
+                        var rx = 2.5 + prand() * 2, ry = 1.8 + prand() * 1.2, rot = prand() * 3;
+                        pebbles.moveTo(x + Math.cos(rot) * rx, y + Math.sin(rot) * rx);
+                        pebbles.ellipse(x, y, rx, ry, rot, 0, TAU);
+                    } else {
+                        var sp = kind < 0.55 ? darkSpecks : lightSpecks, sr = 0.7 + prand() * 1.5;
+                        sp.moveTo(x + sr, y);
+                        sp.arc(x, y, sr, 0, TAU);
+                    }
+                }
+            });
+        });
+        g.fillStyle = '#a49c90'; g.fill(pebbles);
+        g.fillStyle = rgba(120, 80, 40, 0.45); g.fill(darkSpecks);
+        g.fillStyle = rgba(235, 205, 160, 0.5); g.fill(lightSpecks);
+
+        // Decorations: the board's flowers/pebbles/tufts and season scatter, plus bushes and
+        // trees further out (never on the path).
+        var palette = season === 'Spring' ? SPRING_FLOWERS : season === 'Summer' ? SUMMER_FLOWERS
+                    : season === 'Autumn' ? AUTUMN_FLOWERS : FLOWER_COLORS;
+        var props = [];
+        for (r = O.r0; r < O.r1; r++) for (c = O.c0; c < O.c1; c++) {
+            if (onBoard(c, r)) continue;
+            var dr = tileRng(seed ^ 0xDEC0, c, r);
+            var roll = dr();
+            var cx = c * TILE + 12 + dr() * (TILE - 24), cy = r * TILE + 12 + dr() * (TILE - 24);
+            if (nearRoute(routes, c * TILE + TILE / 2, r * TILE + TILE / 2, TILE * 0.75)) continue;
+            // Distance (in tiles) from the board, for the bigger props.
+            var dist = Math.max(c < 0 ? -c : c >= GRID_COLS ? c - GRID_COLS + 1 : 0, r < 0 ? -r : r >= GRID_ROWS ? r - GRID_ROWS + 1 : 0);
+            var big = dr();
+            if (dist >= 2 && big < 0.07) { props.push({ kind: 'tree', x: cx, y: cy + 8, s: 0.85 + dr() * 0.35 }); continue; }
+            var edgeGap = Math.max(-cx, cx - W, -cy, cy - H);   // px from the board's edge
+            if (dist >= 1 && big < 0.15 && edgeGap > TILE * 0.6) { props.push({ kind: 'bush', x: cx, y: cy, s: TILE * (0.22 + dr() * 0.12), seed: dr() * 4294967296 }); continue; }
+            if (roll < 0.17 && season === 'Winter') {
+                drawSnowPatch(g, cx, cy, TILE * (0.18 + dr() * 0.14), TILE * (0.1 + dr() * 0.06));
+            } else if (roll < 0.17) {
+                var n = 1 + Math.floor(dr() * 3);
+                for (i = 0; i < n; i++) {
+                    var px = cx + (dr() - 0.5) * 14, py = cy + (dr() - 0.5) * 14;
+                    var color = palette[Math.floor(dr() * 5)], frot = dr() * TAU;
+                    pen(g, rgba(40, 110, 40, 0.6), 1.2, true);
+                    line(g, px, py, px, py + 5);
+                    for (k = 0; k < 5; k++) {
+                        var a = frot + k * TAU / 5;
+                        fillCircle(g, px + Math.cos(a) * 2.8, py + Math.sin(a) * 2.8, 2.3, color);
+                    }
+                    fillCircle(g, px, py, 1.7, '#ffb627');
+                }
+            } else if (roll < 0.27) {
+                var np = 2 + Math.floor(dr() * 2);
+                for (i = 0; i < np; i++) {
+                    var qx = cx + (dr() - 0.5) * 14, qy = cy + (dr() - 0.5) * 10, prx = 2.5 + dr() * 2.5, prot = dr() * 3;
+                    fillEllipse(g, qx, qy, prx, prx * 0.7, prot, '#b3ada3');
+                    pen(g, '#7d776f', 0.8, false);
+                    g.beginPath(); g.ellipse(qx, qy, prx, prx * 0.7, prot, 0, TAU); g.stroke();
+                    fillCircle(g, qx - prx * 0.3, qy - prx * 0.25, prx * 0.3, rgba(255, 255, 255, 0.35));
+                }
+            } else if (roll < 0.45) {
+                pen(g, season === 'Winter' ? '#a9c9b4' : season === 'Autumn' ? '#a58a3a' : '#4f9a3b', 1.6, true);
+                for (k = 0; k < 5; k++) {
+                    var ba = -Math.PI / 2 + (k - 2) * 0.32 + (dr() - 0.5) * 0.2, bl = 6 + dr() * 4;
+                    g.beginPath();
+                    g.moveTo(cx, cy + 4);
+                    g.quadraticCurveTo(cx + Math.cos(ba) * bl * 0.5, cy + 4 + Math.sin(ba) * bl * 0.6,
+                                       cx + Math.cos(ba) * bl, cy + 4 + Math.sin(ba) * bl);
+                    g.stroke();
+                }
+            }
+            // Season scatter.
+            var sr2 = dr(), scx = c * TILE + TILE * (0.15 + dr() * 0.7), scy = r * TILE + TILE * (0.15 + dr() * 0.7);
+            if (season === 'Spring' && sr2 < 0.16) {
+                var nb = 3 + Math.floor(dr() * 4);
+                for (i = 0; i < nb; i++)
+                    drawBlossom(g, scx + (dr() - 0.5) * TILE * 0.4, scy + (dr() - 0.5) * TILE * 0.3, TILE * 0.03, dr() * TAU, dr() < 0.6 ? '#ffc2d6' : '#fff4f8');
+            } else if (season === 'Autumn' && sr2 < 0.2) {
+                var nl = 2 + Math.floor(dr() * (sr2 < 0.12 ? 6 : 2));
+                for (i = 0; i < nl; i++)
+                    drawLeaf(g, scx + (dr() - 0.5) * TILE * 0.35, scy + (dr() - 0.5) * TILE * 0.3, TILE * (0.06 + dr() * 0.03), dr() * TAU, LEAF_COLORS[Math.floor(dr() * 5)]);
+            } else if (season === 'Winter' && sr2 < 0.22) {
+                drawSnowPatch(g, scx, scy, TILE * (0.22 + dr() * 0.2), TILE * (0.12 + dr() * 0.08));
+            }
+        }
+        // Props sorted by y so the lower ones overlap the upper ones.
+        props.sort(function (a, b) { return a.y - b.y; });
+        props.forEach(function (p) {
+            if (p.kind === 'bush') drawBush(g, p.x, p.y, p.s, season, Rng(p.seed >>> 0));
+            else {
+                var ch = season === 'Winter' || (season === 'Autumn' && ((p.x * 7 + p.y) | 0) % 3 === 0) ? '🌲' : '🌳';
+                fillEllipse(g, p.x + 3, p.y + 26 * p.s, 26 * p.s, 8 * p.s, 0, rgba(0, 0, 0, 0.2));
+                drawGlyph(g, ch, 58 * p.s, p.x, p.y, 1, res);
+                if (season === 'Winter') drawSnowPatch(g, p.x, p.y - 4 * p.s, 16 * p.s, 6 * p.s);
+            }
+        });
+
+        // Night (same wash and moon glow as the board, continued).
+        if (map.night) {
+            g.fillStyle = rgba(10, 20, 60, 0.38);
+            g.fill(outside);
+            var glow = g.createRadialGradient(W - 70, 60, 0, W - 70, 60, 260);
+            glow.addColorStop(0, rgba(220, 230, 255, 0.28));
+            glow.addColorStop(1, rgba(220, 230, 255, 0));
+            g.fillStyle = glow;
+            g.fill(outside);
+        }
+
+        // Plantable cue: the garden past the grid a little duller and darker, and a soft shade
+        // falling off the board's edge (like a slightly raised bed).
+        if (CUE & 1) {
+            g.save();
+            g.globalCompositeOperation = 'saturation';
+            g.fillStyle = rgba(128, 128, 128, 0.28);
+            g.fill(outside);
+            g.restore();
+            g.fillStyle = map.night ? rgba(0, 0, 20, 0.12) : rgba(20, 35, 10, 0.12);
+            g.fill(outside);
+            var E = 18;
+            [[0, -E, W, E, 0, 0, 0, -E], [0, H, W, E, 0, H, 0, H + E], [-E, 0, E, H, 0, 0, -E, 0], [W, 0, E, H, W, 0, W + E, 0]]
+                .forEach(function (q) {
+                    var sg = g.createLinearGradient(q[4], q[5], q[6], q[7]);
+                    sg.addColorStop(0, rgba(20, 35, 10, 0.2));
+                    sg.addColorStop(1, rgba(20, 35, 10, 0));
+                    g.fillStyle = sg;
+                    g.fillRect(q[0], q[1], q[2], q[3]);
+                });
+        }
+        if (CUE & 2) {
+            pen(g, rgba(255, 255, 240, 0.35), 2, false);
+            g.lineJoin = 'round';
+            roundRectPath(g, -1, -1, W + 2, H + 2, 4);
+            g.stroke();
+        }
+        return pm;
+    }
+
+    var outer = null, outerKey = '', outerRect = null, outerRes = 0, outerBuiltAt = -1;
+    function setupOuter(game, view, now) {
+        var O = outerRectFor(view);
+        var res = Math.max(0.25, Math.min(loRes || 1, Math.sqrt(6e6 / (O.w * O.h))));
+        res = Math.round(res * 4) / 4 || 0.25;
+        var key = game.mapIndex + '|' + W + 'x' + H + '|' + O.c0 + ',' + O.r0 + ',' + O.c1 + ',' + O.r1 + '|' + res + '|' + CUE;
+        if (key === outerKey) return;
+        // While a window is being dragged, rebuild at most every 0.15 s (gaps show grass color).
+        var covers = outer && outerRect && outerKey.split('|')[0] === String(game.mapIndex) &&
+                     outerRect.c0 <= O.c0 && outerRect.r0 <= O.r0 && outerRect.c1 >= O.c1 && outerRect.r1 >= O.r1;
+        if (outer && outerKey.split('|')[0] === String(game.mapIndex) && now - outerBuiltAt < 0.15 && !covers) return;
+        if (covers && now - outerBuiltAt < 0.3) return;
+        var built = null;
+        for (var s = res; !built; s = s / 2) {
+            try { built = buildOuter(game, O, s); outerRes = s; }
+            catch (e) { if (s <= 0.25) { built = null; break; } }
+        }
+        outer = built; outerRect = O; outerKey = key; outerBuiltAt = now;
+    }
+
+    // Screen-space vignette over the whole garden (it was baked into the board before).
+    var vigKey = '', vigGrad = null;
+    function drawVignette(p, g, view) {
+        var map = mapOf(g), season = seasonOf(g);
+        var key = view.cssW + 'x' + view.cssH + '|' + g.mapIndex;
+        if (key !== vigKey) {
+            vigKey = key;
+            var cx = view.cssW / 2, cy = view.cssH / 2, mn = Math.min(view.cssW, view.cssH), mx = Math.max(view.cssW, view.cssH);
+            vigGrad = p.createRadialGradient(cx, cy, mn * 0.45, cx, cy, mx * 0.72);
+            vigGrad.addColorStop(0, rgba(20, 40, 10, 0));
+            vigGrad.addColorStop(1, map.night ? rgba(0, 0, 20, 0.45) : season === 'Winter' ? rgba(40, 60, 90, 0.24)
+                                 : season === 'Autumn' ? rgba(70, 35, 5, 0.26) : rgba(20, 40, 10, 0.24));
+        }
+        p.fillStyle = vigGrad;
+        p.fillRect(0, 0, view.cssW, view.cssH);
     }
 
     // Sky lanes: faint dashed trails with chevrons toward the house (into the background).
@@ -705,14 +1034,24 @@ var Renderer = (function () {
     }
 
     // ---------- per-frame layers ----------
+    // Particles (weather, fireflies, wind) live in the whole garden rect DOM (the outer garden's
+    // world rect, or the board), with counts scaled by its area; ones outside the visible world
+    // rect VISR are skipped.
+    var DOM = { x: 0, y: 0, w: 960, h: 640 }, VISR = { x0: -1e9, y0: -1e9, x1: 1e9, y1: 1e9 };
+    function visible(x, y, pad) { return x > VISR.x0 - pad && x < VISR.x1 + pad && y > VISR.y0 - pad && y < VISR.y1 + pad; }
+
     function drawFireflies(p, g) {
         if (!mapOf(g).night) return;
         var t = g.time;
-        for (var i = 0; i < 28; i++) {
+        var nf = Math.round(28 * Math.max(1, (DOM.w * DOM.h) / (W * H)));
+        for (var i = 0; i < nf; i++) {
             var phase = i * 2.39996;
-            var x = fmod(80 + i * 137.0 + 40 * Math.sin(t * 0.31 + phase) + t * (6 + i % 5), W);
-            var y = fmod(40 + i * 89.0 + 30 * Math.cos(t * 0.27 + phase * 1.3), H);
-            if (y < 0) y += H;
+            var x = fmod(80 + i * 137.0 + 40 * Math.sin(t * 0.31 + phase) + t * (6 + i % 5), DOM.w);
+            var y = fmod(40 + i * 89.0 + 30 * Math.cos(t * 0.27 + phase * 1.3), DOM.h);
+            if (x < 0) x += DOM.w;
+            if (y < 0) y += DOM.h;
+            x += DOM.x; y += DOM.y;
+            if (!visible(x, y, 10)) continue;
             var blink = 0.5 + 0.5 * Math.sin(t * (1.6 + (i % 7) * 0.23) + phase);
             if (blink < 0.15) continue;
             var glow = p.createRadialGradient(x, y, 0, x, y, 9);
@@ -727,20 +1066,25 @@ var Renderer = (function () {
         var season = seasonOf(g);
         if (season === 'Summer') return;
         var t = g.time;
-        var area = (W * H) / (960.0 * 640.0);
+        var area = (DOM.w * DOM.h) / (960.0 * 640.0);
         var i, phase, x, y, r;
         p.save();
         if (season === 'Winter') {
             var n = Math.floor(60 * area);
+            var flakes = [new Path2D(), new Path2D(), new Path2D()];
             for (i = 0; i < n; i++) {
                 phase = i * 2.39996;
                 var fall = TILE * (0.3 + (i % 5) * 0.08);
-                x = fmod(i * 97.0 + TILE * 0.25 * Math.sin(t * 0.7 + phase) + t * TILE * 0.1, W);
-                y = fmod(i * 53.0 + t * fall, H + 10) - 5;
-                if (x < 0) x += W;
+                x = fmod(i * 97.0 + TILE * 0.25 * Math.sin(t * 0.7 + phase) + t * TILE * 0.1, DOM.w);
+                y = fmod(i * 53.0 + t * fall, DOM.h + 10) - 5;
+                if (x < 0) x += DOM.w;
+                x += DOM.x; y += DOM.y;
+                if (!visible(x, y, 4)) continue;
                 r = TILE * (0.025 + (i % 3) * 0.012);
-                fillCircle(p, x, y, r, rgba(255, 255, 255, 0.5 + 0.12 * (i % 3)));
+                flakes[i % 3].moveTo(x + r, y);
+                flakes[i % 3].arc(x, y, r, 0, TAU);
             }
+            flakes.forEach(function (f, k) { p.fillStyle = rgba(255, 255, 255, 0.5 + 0.12 * k); p.fill(f); });
         } else {
             var autumn = season === 'Autumn';
             var m = Math.floor((autumn ? 14 : 8) * area);
@@ -748,9 +1092,11 @@ var Renderer = (function () {
             p.globalAlpha = 0.85;
             for (i = 0; i < m; i++) {
                 phase = i * 2.39996;
-                x = fmod(i * 173.0 + t * TILE * (0.3 + (i % 4) * 0.07) + TILE * 0.5 * Math.sin(t * 0.9 + phase), W + 2 * pad) - pad;
-                y = fmod(i * 71.0 + t * TILE * (0.2 + (i % 3) * 0.06), H + 2 * pad) - pad;
-                if (x < -pad) x += W + 2 * pad;
+                x = fmod(i * 173.0 + t * TILE * (0.3 + (i % 4) * 0.07) + TILE * 0.5 * Math.sin(t * 0.9 + phase), DOM.w + 2 * pad) - pad;
+                y = fmod(i * 71.0 + t * TILE * (0.2 + (i % 3) * 0.06), DOM.h + 2 * pad) - pad;
+                if (x < -pad) x += DOM.w + 2 * pad;
+                x += DOM.x; y += DOM.y;
+                if (!visible(x, y, 8)) continue;
                 var rot = t * (1.2 + (i % 5) * 0.3) + phase;
                 if (autumn) drawLeaf(p, x, y, TILE * (0.08 + (i % 3) * 0.015), rot, LEAF_COLORS[i % 5]);
                 else {
@@ -1121,14 +1467,15 @@ var Renderer = (function () {
         var dir = num(g.windDir, g, 1);
         p.save();
         p.globalAlpha = Math.min(1, 0.3 * ww + 0.9 * ws);
-        var n = Math.max(8, Math.floor(15 * Math.sqrt(g.W * g.H / (960.0 * 640.0))));
+        var n = Math.max(8, Math.floor(15 * Math.sqrt(g.W * g.H / (960.0 * 640.0)) * Math.sqrt(Math.max(1, DOM.w * DOM.h / (g.W * g.H)))));
         var slant = 0.22;
         for (var i = 0; i < n; i++) {
             var speed = (1000 + (i * 37 % 400)) * FX_UI;
             var len = (110 + (i * 53 % 70)) * FX_UI;
-            var travel = fmod(g.time * speed + i * 397.3, g.H + len * 2) - len;
-            var y = dir > 0 ? travel : g.H - travel;
-            var x = fmod(i * 157.7 + 40 + travel * slant, g.W);
+            var travel = fmod(g.time * speed + i * 397.3, DOM.h + len * 2) - len;
+            var y = DOM.y + (dir > 0 ? travel : DOM.h - travel);
+            var x = DOM.x + fmod(i * 157.7 + 40 + travel * slant, DOM.w);
+            if (!visible(x, y, len + 20)) continue;
             var sway = Math.sin(g.time * 2.2 + i * 1.7) * 10 * FX_UI;
             var tx = x - len * slant, ty = y - dir * len;
             var path = function (o) {
@@ -1609,27 +1956,39 @@ var Renderer = (function () {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
 
-        // Board shadow and rounded clip (CSS px).
+        // Immersive: the garden fills the whole canvas (no board shadow or rounded clip).
         var rect = view.boardRect();
+        setupOuter(game, view, now);
+        var map0 = mapOf(game);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        roundRectPath(ctx, rect.x, rect.y + 4, rect.w, rect.h, 16);
-        ctx.fillStyle = rgba(40, 70, 20, 0.12);
-        ctx.fill();
-        ctx.save();
-        roundRectPath(ctx, rect.x, rect.y, rect.w, rect.h, 16);
-        ctx.clip();
+        ctx.fillStyle = map0.grassB;   // under any gap while a resized outer garden rebuilds
+        ctx.fillRect(0, 0, view.cssW, view.cssH);
 
         // World layers.
         ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * view.ox, dpr * view.oy);
-        // Only the visible part of the background, with cheap (bilinear) smoothing.
-        var vx0 = Math.max(0, -view.ox / s), vy0 = Math.max(0, -view.oy / s);
-        var vx1 = Math.min(W, (view.cssW - view.ox) / s), vy1 = Math.min(H, (view.cssH - view.oy) / s);
+        var wx0 = -view.ox / s, wy0 = -view.oy / s, wx1 = (view.cssW - view.ox) / s, wy1 = (view.cssH - view.oy) / s;
+        VISR = { x0: wx0, y0: wy0, x1: wx1, y1: wy1 };
+        DOM = outer && outerRect ? { x: outerRect.x, y: outerRect.y, w: outerRect.w, h: outerRect.h } : { x: 0, y: 0, w: W, h: H };
+        ctx.imageSmoothingQuality = 'low';
+        // Only the visible parts of the outer garden and the board, with cheap (bilinear) smoothing.
+        if (outer) {
+            var O = outerRect, ux0 = Math.max(O.x, wx0), uy0 = Math.max(O.y, wy0);
+            var ux1 = Math.min(O.x + O.w, wx1), uy1 = Math.min(O.y + O.h, wy1);
+            if (ux1 > ux0 && uy1 > uy0) {
+                var ok_ = outer.width / O.w;
+                ctx.drawImage(outer, (ux0 - O.x) * ok_, (uy0 - O.y) * ok_, (ux1 - ux0) * ok_, (uy1 - uy0) * ok_, ux0, uy0, ux1 - ux0, uy1 - uy0);
+            }
+        }
+        var vx0 = Math.max(0, wx0), vy0 = Math.max(0, wy0), vx1 = Math.min(W, wx1), vy1 = Math.min(H, wy1);
         if (vx1 > vx0 && vy1 > vy0) {
             var kx = bg.width / W, ky = bg.height / H;
-            ctx.imageSmoothingQuality = 'low';
             ctx.drawImage(bg, vx0 * kx, vy0 * ky, (vx1 - vx0) * kx, (vy1 - vy0) * ky, vx0, vy0, vx1 - vx0, vy1 - vy0);
-            ctx.imageSmoothingQuality = 'high';
         }
+        ctx.imageSmoothingQuality = 'high';
+        ctx.save();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        drawVignette(ctx, game, view);
+        ctx.restore();
         if (U.placing >= 0) drawGrid(ctx);
         if (U.placing >= 0 && U.hover) drawPreview(ctx, U);
         drawRanges(ctx, game, U);
@@ -1640,13 +1999,13 @@ var Renderer = (function () {
         drawEffects(ctx, game);
         drawWeather(ctx, game);
         drawFireflies(ctx, game);
-        ctx.restore();
 
-        // Screen-space overlays (CSS px).
+        // Screen-space overlays (CSS px), within the part of the board inside the safe rect.
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        var vis = { x: Math.max(0, rect.x), y: Math.max(0, rect.y) };
-        vis.w = Math.min(view.cssW, rect.x + rect.w) - vis.x;
-        vis.h = Math.min(view.cssH, rect.y + rect.h) - vis.y;
+        var sr = view.safeRect ? view.safeRect() : { x: 0, y: 0, w: view.cssW, h: view.cssH };
+        var vis = { x: Math.max(sr.x, rect.x), y: Math.max(sr.y, rect.y) };
+        vis.w = Math.min(sr.x + sr.w, rect.x + rect.w) - vis.x;
+        vis.h = Math.min(sr.y + sr.h, rect.y + rect.h) - vis.y;
         drawBossBar(ctx, game, vis);
         drawTouchLoupe(ctx, game, U, view);
         if (pendingBurst) { pendingBurst = false; spawnConfetti(vis); lastConfetti = now; }

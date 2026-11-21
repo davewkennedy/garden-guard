@@ -177,21 +177,21 @@ async function main() {
         check(paused && await G('g.time') === tA, `paused (game.time frozen at ${tA.toFixed(2)})`);
         await tapEl('#btnPause', 'Resume');
         check(!(await ev('UI.paused()')), 'resumed');
-        const w0 = await ev(`document.getElementById('board').getBoundingClientRect().width`);
+        const w0 = await ev(`document.getElementById('boardWrap').getBoundingClientRect().width`);
         await tapEl('#sideToggle', '▸ side toggle');
         await sleep(400);
-        const w1 = await ev(`document.getElementById('board').getBoundingClientRect().width`);
+        const w1 = await ev(`document.getElementById('boardWrap').getBoundingClientRect().width`);
         const coll = await ev(`document.getElementById('side').classList.contains('collapsed')`);
         check(coll && w1 > w0 + 50, `side collapsed, board ${w0 | 0} -> ${w1 | 0} px wide`);
         await tapEl('#sideToggle', '◂ side toggle');
         await sleep(400);
-        const w2 = await ev(`document.getElementById('board').getBoundingClientRect().width`);
+        const w2 = await ev(`document.getElementById('boardWrap').getBoundingClientRect().width`);
         check(!(await ev(`document.getElementById('side').classList.contains('collapsed')`)) && Math.abs(w2 - w0) < 2, `side expanded, board back to ${w2 | 0} px`);
         await tapEl('#btnJournal', '📖 Journal');
         check((await overlay()).includes('ovJournal'), `journal open (${await overlay()})`);
         await tapEl('#btnJournalClose', 'Journal Close');
         check(await overlay() === '', 'journal closed');
-        const c = await ev(`(() => { const r = document.getElementById('board').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+        const c = await ev(`(() => { const r = document.getElementById('boardWrap').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
         const pts = d => [{ x: c.x - d, y: c.y }, { x: c.x + d, y: c.y }];
         await cdp.touch('touchStart', pts(30));
         for (let d = 40; d <= 120; d += 20) { await sleep(30); await cdp.touch('touchMove', pts(d)); }
