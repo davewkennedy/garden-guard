@@ -18,6 +18,12 @@ Team: Bobby (renderer.js/view.js: outer garden, path, weather, plantable cue), B
 - 00:48 Bobby M2: perf fixed (outer garden in 512 px tiles, strips only). Draw avg iPhone 4x throttle: 5.2/3.4/4.4 ms (zoom1/zoom4/pinch)
   vs 4.8/2.8/4.4 before immersive. Whole-frame headless time is compositing (full-screen canvas + glass), check on a real phone.
   All maps x 7 sizes + zoom shots in shots/immersive/bobby/c-*. Snapshot immersive-6-bobby-m2. Bobby now on the Qt port.
+- 00:53 Bobby M3: Qt immersive look (outer garden pixmap, path off-screen, full-window weather, vignette, luminance cue; no shadow/clip).
+  Hank: builds clean in build/lead, garden_simtest PASS, shots in shots/immersive/after/qt-*. Snapshot immersive-7-bobby-qt.
+- 00:55 Bobby: Qt window sizes OK (1024x700, 1024x768, 900x600, 1920x1080). Note: Qt window min width ~1178 (header/panel minimums;
+  same layout minimums as before, not a renderer issue) -> fits the existing Qt back-port backlog item. Hank: sw.js ggweb-3b390b7b40, dist rebuilt.
+- 00:55 Hank: final-qa on source after the perf fix: 15/15 PASS.
+- 00:56 Bill FINAL on dist: sw.js matches (23 files, ggweb-3b390b7b40), pwa-check PASS (installable, offline), resume 16/16. Bill done.
 
 ----- (below: the web port board, kept for history) -----
 

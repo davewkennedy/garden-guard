@@ -71,3 +71,4 @@ M3 (Qt port, ~/projects/garden-immersive, build/3e Release, builds clean): rende
   Cue: Qt has no 'saturation' blend, so it's a per-pixel 22% mix toward luminance, then the same dark wash + edge shade.
   boardwidget.cpp paintEvent: no shadow/rounded clip (CORNER removed); passes the widget rect in board coords.
   Shots: shots/immersive/bobby/qt-map{1,5,7,10}-*.png (offscreen platform, 0 errors).
+  + Qt at 900x600 / 1024x768 / 1920x1080 (maps 3, 2, 9): fine, 0 errors. Waiting for Hank.

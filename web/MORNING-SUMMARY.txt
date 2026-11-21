@@ -1,0 +1,51 @@
+# Good morning! Phase 1 "immersive look" is DONE (web + Qt)
+
+Started 00:06, planned pause 00:10-00:21 (your 95% warning), finished ~01:05 (WSL clock).
+Team: Hank (layout, tests), Bobby (garden drawing, web + Qt), Bill (frosted panels, web + Qt).
+Dale, Boomhauer and Peggy rested.
+
+## Where everything is (new-folder method: your originals are untouched)
+| | Original (untouched) | New copy |
+|---|---|---|
+| Web | C:\Users\david\claude\claude2\gardenguard++web\ | C:\Users\david\claude\claude2\gardenguard++web-immersive\ |
+| Qt  | ~/projects/garden-plusplus | ~/projects/garden-immersive |
+
+- Play the new web version: double-click gardenguard++web-immersive\index.html
+- Upload copy: gardenguard++web-immersive\dist\gardenguard-web.zip
+- Qt: ~/projects/garden-immersive/build/lead/garden
+- BEFORE/AFTER PICTURES: open gardenguard++web-immersive\shots\immersive\compare.html
+  (web at PC, iPhone, iPad and iPhone SE sizes on 4 maps, plus Qt).
+- Snapshots: ~/projects/snapshots/immersive-0 ... immersive-8 (.tar).
+
+## What changed
+1. The garden fills the whole screen. Grass, flowers, bushes and trees extend past the board,
+   in each map's season (snow, autumn leaves, night). The path runs in from off-screen and out
+   past the house. Weather, fireflies and wind cover everything.
+2. Plantable cue: the garden outside the board is slightly duller and darker, with a soft shade
+   at the board's edge. (Web only: other cues can be compared with ?cue=0 none, ?cue=2 thin
+   border, ?cue=3 both.)
+3. The header and plant panel are frosted glass over the garden, readable on every season
+   (including snow), with the same tap sizes.
+4. iPad held upright: the plant panel now ends under the wave button, so more garden shows.
+5. Qt has the same look. Qt can't blur what's behind a panel, so its glass is a frosted tint.
+No gameplay changes: the web and C++ game logic still match exactly.
+
+## Tests (all PASS)
+- Web QA on the source and on the upload copy: 15/15 each (all sizes, touch tests, autopilot,
+  exact Node-vs-C++ parity).
+- Installable + offline + resume 16/16 (Bill, on the upload copy).
+- Phone speed: drawing is back to pre-change levels (5.2 ms vs 4.8 ms at 4x slowdown).
+  Worth a look on your real phone: the full-screen canvas costs a little more to composite.
+- Qt: builds clean, C++ sim tests PASS, checked at 5 window sizes.
+
+## Decisions for you (nothing was decided for you)
+- Do you like it? If yes, the immersive copies can become the main versions (your call, and
+  a good first thing to put in source control).
+- Plantable cue: keep the default, or try ?cue=2 / ?cue=3 on the web version.
+- Known, not new: the Qt window can't go narrower than ~1178 px (header/panel minimums).
+  It fits the existing "Qt back-port" backlog item.
+
+## Usage
+Logged in C:\Users\david\claude\claude2\usage-log.txt. After the 00:21 reset, the whole job
+took ~45 minutes with 3 sessions and did not hit the limit.
+Details: notes\STATUS.txt (Phase 1 section at the top).
