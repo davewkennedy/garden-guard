@@ -23,6 +23,9 @@ public:
     void hideToast();
     void setPausedBanner(bool on);
     void celebrate();   // burst of confetti over the board
+    // Immersive: the widget fills the window; the board fits inside this rect (widget px).
+    // An empty rect means the whole widget.
+    void setSafeRect(const QRectF &r);
     QSize sizeHint() const override { return {960, 640}; }
 
 signals:
@@ -41,6 +44,8 @@ protected:
 
 private:
     QRectF boardRect() const;            // where the board sits inside the widget
+    QRectF safeRect() const;             // where the board may go (see setSafeRect)
+    QRectF safeRect_;
     bool tileAt(QPointF pos, int &col, int &row) const;
 
     Game *game_;

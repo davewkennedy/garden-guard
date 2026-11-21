@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "immersive.h"
 
 #include "boardwidget.h"
 #include "data.h"
@@ -138,9 +139,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     connect(&game_, &Game::wildcard, this, [this] { board_->showToast(QStringLiteral("🦇 A wild bat appears! Catch it for 30 coins!")); });
     connect(board_, &BoardWidget::hoverLeft, this, [this] { board_->view.hover.reset(); });
 
+    // Immersive: an empty slot holds the board's place in the layout; the board widget itself
+    // fills the whole window behind everything (see immersive.cpp).
+    auto *boardSlot = new QWidget;
+    boardSlot->setMinimumSize(480, 320);
+    boardSlot->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     auto *play = new QHBoxLayout;
     play->setSpacing(16);
-    play->addWidget(board_, 1);
+    play->addWidget(boardSlot, 1);
     play->addWidget(buildSide());
 
     auto *root = new QVBoxLayout(central);
@@ -148,6 +154,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     root->setSpacing(12);
     root->addWidget(buildHeader());
     root->addLayout(play, 1);
+    new ImmersiveLayout(central, board_, boardSlot);
 
     // Overlays sit on top of everything inside the central widget.
     QLabel *introTitle, *introText;

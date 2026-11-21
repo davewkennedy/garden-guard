@@ -18,7 +18,6 @@ constexpr double CORNER = 16;
 
 BoardWidget::BoardWidget(Game *game, QWidget *parent) : QWidget(parent), game_(game) {
     setMouseTracking(true);
-    setMinimumSize(480, 320);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     toastTimer_.setSingleShot(true);
     connect(&toastTimer_, &QTimer::timeout, this, &BoardWidget::hideToast);
@@ -85,12 +84,24 @@ void BoardWidget::drawConfetti(QPainter &p) {
     update();   // keep animating until every piece has fallen
 }
 
+void BoardWidget::setSafeRect(const QRectF &r) {
+    if (r == safeRect_) return;
+    safeRect_ = r;
+    update();
+}
+
+QRectF BoardWidget::safeRect() const {
+    const QRectF all(0, 0, width(), height());
+    return safeRect_.isEmpty() ? all : safeRect_.intersected(all);
+}
+
 QRectF BoardWidget::boardRect() const {
-    // Largest 3:2 rectangle that fits: centered left-to-right, at the top
-    // (leaving room below for its shadow).
-    double s = std::min(width() / double(game_->W), (height() - 6) / double(game_->H));
+    // Immersive: the largest board-shaped rectangle that fits the safe rect, centered in it.
+    const QRectF a = safeRect();
+    if (a.width() < 2 || a.height() < 2) return {};
+    double s = std::min(a.width() / double(game_->W), a.height() / double(game_->H));
     double w = game_->W * s, h = game_->H * s;
-    return {(width() - w) / 2, 0, w, h};
+    return {a.left() + (a.width() - w) / 2, a.top() + (a.height() - h) / 2, w, h};
 }
 
 bool BoardWidget::tileAt(QPointF pos, int &col, int &row) const {

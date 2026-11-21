@@ -803,8 +803,10 @@ var Renderer = (function () {
         // The path, continued off-screen from the entrance(s) and past the house.
         var ext = new Path2D();
         routes.forEach(function (R) {
-            ext.moveTo(R.head[0].x, R.head[0].y); ext.lineTo(R.head[1].x, R.head[1].y);
-            ext.moveTo(R.tail[0].x, R.tail[0].y); ext.lineTo(R.tail[1].x, R.tail[1].y);
+            // The whole route (the board covers its inner part), so it meets the board seamlessly.
+            ext.moveTo(R.head[0].x, R.head[0].y);
+            R.pts.forEach(function (q) { ext.lineTo(q.x, q.y); });
+            ext.lineTo(R.tail[1].x, R.tail[1].y);
         });
         if (season === 'Winter') { pen(g, rgba(250, 252, 255, 0.75), TILE * 1.0, true); g.stroke(ext); }
         [[0.92, rgba(50, 35, 15, 0.22)], [0.84, '#93653b'], [0.74, '#c99a62'], [0.40, rgba(228, 190, 135, 0.45)]]
@@ -930,7 +932,7 @@ var Renderer = (function () {
         if (CUE & 1) {
             g.save();
             g.globalCompositeOperation = 'saturation';
-            g.fillStyle = rgba(128, 128, 128, 0.28);
+            g.fillStyle = rgba(128, 128, 128, 0.22);
             g.fill(outside);
             g.restore();
             g.fillStyle = map.night ? rgba(0, 0, 20, 0.12) : rgba(20, 35, 10, 0.12);

@@ -14,6 +14,7 @@ add_executable(garden
     src/game.h src/game.cpp
     src/renderer.h src/renderer.cpp
     src/boardwidget.h src/boardwidget.cpp
+    src/immersive.h src/immersive.cpp
     src/audio.h src/audio.cpp
     src/mainwindow.h src/mainwindow.cpp src/focusfire.cpp src/journal.cpp src/difficulty.cpp
     src/autopilot.h src/autopilot.cpp
