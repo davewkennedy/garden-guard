@@ -50,3 +50,10 @@ QA: a scratch harness in my scratchpad renders maps 0/4/6/9 at PC 1280x800 and p
 
 IMMERSIVE (paused for usage window): read renderer.js/view.js and the brief; no edits yet, files unchanged.
   Plan: View.setSafeRect + safe-rect refit/clamp; outer garden as a cached extended bg (per-tile seeded, board bg composited in), path extended both ends, weather/wind/fireflies over the outer rect, screen-space vignette, cue = desaturated/darker outer + soft edge.
+M1 (immersive web, working): view.js setSafeRect/safeRect (board fits + clamps in the safe rect, tileAt null outside).
+  renderer.js: no board shadow/clip; outer garden = cached canvas (per-tile seeded Rng, so a resize doesn't reshuffle),
+  covering everything visible at zoom 1: grass checker, blades, flowers/pebbles/tufts, season scatter, bushes + trees
+  (2+ tiles out), season wash, frost, night wash/moon glow. Path continued off-screen both ends (whole route + far
+  extensions). Weather/fireflies/wind over the whole garden rect (culled to the view). Vignette now screen-space.
+  Cue (?cue=0..3, default 1): outer slightly desaturated/darker + soft shade off the board edge; 2 = thin light border.
+  Shots: shots/immersive/bobby/. Script: scratchpad qa/imm.js (+clip/js options).

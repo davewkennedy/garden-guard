@@ -4,7 +4,7 @@ Budget: ONLY the 00:20-05:20 window (no credits). Fallback wake-up 05:23. Priori
 Team: Bobby (renderer.js/view.js: outer garden, path, weather, plantable cue), Bill (css/immersive.css frosted panels, phone.css, sw.js), Hank (layout, main.js, tests, Qt plan).
 - 00:06 START. 00:10-00:21 planned pause (95% usage). Before shots: shots/immersive/before/.
 - 00:25 Hank: canvas full screen behind panels, pointer-events fall-through, View.setSafeRect wired (Bobby). Touch QA 10/10. Tests measure #boardWrap.
-- 00:35 Hank: Qt layout in ~/projects/garden-immersive: BoardWidget fills the window behind header/side (src/immersive.cpp, ImmersiveLayout),
+- 00:28 Hank: Qt layout in ~/projects/garden-immersive: BoardWidget fills the window behind header/side (src/immersive.cpp, ImmersiveLayout),
   empty boardSlot in the layout -> BoardWidget::setSafeRect; board centered in the slot. Builds clean (build/lead). Outer garden + glass NOT yet in Qt.
 
 ----- (below: the web port board, kept for history) -----
