@@ -70,3 +70,8 @@ PAUSED for the usage window. Next: wait for Hank's layout + link, then shots (6 
   Fixes: disabled green buttons readable (#4f7a4c text); selected difficulty kept green on the glass card; phone padding
   trimmed (glass edges had pushed the plant panel 9px over at 844x390 + SE). phone-fit: 15/15 fit.
   Next: make-sw-list (immersive.css), pwa-check + resume at the end (after Bobby's renderer lands), then Qt STYLE block.
+00:33 WEB PASS after Bobby's renderer: sw.js 23 files ggweb-e042e79b66; pwa-check installable+offline; resume 16/16. Next: Qt STYLE block (garden-immersive, build/0c).
+00:35 MILESTONE 2 (Qt): garden-immersive/src/mainwindow.cpp STYLE block = frosted glass without blur (#central transparent;
+  #header [Hank named it] + #side rgba(248,252,242,215) with a green hairline, #side green top band; translucent pills, buttons, shop states;
+  disabled primary readable; lighter overlay, near-opaque card). Builds clean in build/0c (Release). Shots: shots/immersive/qt-map{1,3,6,9}.png, qt-intro.png.
+  Outside the board is still the plain window background in Qt (outer garden is not mine).

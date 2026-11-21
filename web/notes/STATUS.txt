@@ -8,6 +8,11 @@ Team: Bobby (renderer.js/view.js: outer garden, path, weather, plantable cue), B
   empty boardSlot in the layout -> BoardWidget::setSafeRect; board centered in the slot. Builds clean (build/lead). Outer garden + glass NOT yet in Qt.
 - 00:28 Bobby M1: web outer garden (grass/decor/season/night), path off-screen both ends (incl. path2), full-screen weather/wind,
   plantable cue = outer garden duller+darker with soft falloff (?cue=0/2/3 to compare). 0 errors at 5 sizes. Snapshot immersive-3-bobby-m1.
+- 00:31 Bill M1: css/immersive.css frosted glass (8px blur on phones, opaque fallback), disabled-button contrast, phone fit 15/15,
+  30 shots 0 errors; glass costs nothing measurable. Snapshot immersive-4-bill-m1.
+  Open: frame time 38-42 ms (iPhone, 4x throttle, 49 bugs) -> Bobby checking outer-garden caching.
+- 00:33 Bill: sw.js 23 files (ggweb-e042e79b66); pwa-check PASS (installable, offline); resume 16/16. Now on the Qt STYLE block.
+  Idea (low priority): iPad portrait side panel has a lot of empty glass below the plant panel.
 
 ----- (below: the web port board, kept for history) -----
 

@@ -22,44 +22,53 @@ namespace {
 constexpr int BUMP_MS = 300;
 const QString COIN = QStringLiteral("💰");
 
-// Qt style sheets are Qt's take on CSS. Colors match the web version's light theme.
+// Qt style sheets are Qt's take on CSS. Immersive look (claude2-0c / Bill): the board fills the window
+// behind everything, and the panels float on it as frosted glass, matching the web's css/immersive.css.
+// Qt can't blur what's behind a widget cheaply, so the glass is a more opaque light fill (no blur) with
+// a dark-green hairline that stays visible on snow. Text stays dark on light everywhere.
 const char *const STYLE = R"(
-#central { background: #eef6e4; }
+#central { background: transparent; }
 QLabel { color: #24331c; }
-#title { font-size: 24px; font-weight: 800; color: #2f8a3a; }
+#header {
+  background: rgba(248, 252, 242, 215); border: 1px solid rgba(47, 90, 40, 80); border-radius: 16px;
+}
+#title { font-size: 24px; font-weight: 800; color: #22702c; }
 #stat {
-  background: #ffffff; border: 1px solid #d6e3c6; border-radius: 14px;
+  background: rgba(255, 255, 255, 190); border: 1px solid rgba(47, 90, 40, 60); border-radius: 14px;
   padding: 4px 14px; font-size: 16px; font-weight: 700;
 }
-#stat[low="true"] { color: #e0533d; border-color: #e0533d; }
-#stat[bump="true"] { background: #fff3c4; border-color: #ffc93c; }
+#stat[low="true"] { color: #e0533d; border-color: #e0533d; background: rgba(255, 236, 232, 235); }
+#stat[bump="true"] { background: rgba(255, 243, 196, 240); border-color: #ffc93c; }
 
 QPushButton {
-  background: #ffffff; color: #24331c; border: 1px solid #d6e3c6;
+  background: rgba(255, 255, 255, 190); color: #24331c; border: 1px solid rgba(47, 90, 40, 62);
   border-radius: 10px; padding: 6px 12px; font-weight: 600;
 }
-QPushButton:hover { background: #f4f8ec; }
-QPushButton:pressed { background: #e6efda; }
-QPushButton:disabled { color: #a3ad99; background: #f3f6ee; }
+QPushButton:hover { background: rgba(255, 255, 255, 235); }
+QPushButton:pressed { background: rgba(230, 239, 218, 245); }
+QPushButton:disabled { color: #8f9a85; background: rgba(243, 246, 238, 150); }
 QPushButton[kind="primary"] { background: #4caf50; color: #ffffff; border: 1px solid #2f8a3a; }
 QPushButton[kind="primary"]:hover { background: #43a047; }
-QPushButton[kind="primary"]:disabled { background: #b5d8b6; color: #f4f8ec; border-color: #a3cba5; }
+QPushButton[kind="primary"]:disabled { background: rgba(196, 224, 192, 225); color: #4f7a4c; border-color: rgba(47, 138, 58, 90); }
 QPushButton[kind="danger"] { background: #e0533d; color: #ffffff; border: 1px solid #b83a27; }
 QPushButton[kind="danger"]:hover { background: #cf4732; }
 QPushButton[kind="danger"]:disabled { background: #efb3a9; color: #fbeeeb; }
 QPushButton[kind="big"] { font-size: 16px; font-weight: 700; min-height: 40px; }
 #iconBtn { font-size: 18px; min-width: 40px; max-width: 40px; min-height: 40px; max-height: 40px; padding: 0; }
-#iconBtn[on="true"] { background: #fff3c4; border-color: #ffc93c; }
+#iconBtn[on="true"] { background: rgba(255, 243, 196, 245); border-color: #ffc93c; }
 
-#side { background: #ffffff; border: 1px solid #d6e3c6; border-radius: 16px; }
+#side {
+  background: rgba(248, 252, 242, 215); border: 1px solid rgba(47, 90, 40, 80); border-radius: 16px;
+  border-top: 3px solid rgba(76, 175, 80, 200);
+}
 #sideTitle { font-size: 18px; font-weight: 800; }
-#hint { color: #64735a; font-size: 12px; }
+#hint { color: #55644b; font-size: 12px; }
 
-#shopItem { background: #f4f8ec; border: 2px solid #d6e3c6; border-radius: 12px; padding: 0; }
-#shopItem:hover { border-color: #4caf50; }
-#shopItem:checked { background: rgba(76, 175, 80, 0.18); border: 2px solid #2f8a3a; }
-#shopItem:disabled { background: #f6f7f3; border-color: #e3e8dc; }
-#shopItem[fresh="true"] { border-color: #f2b705; background: #fff8dc; }
+#shopItem { background: rgba(255, 255, 255, 160); border: 2px solid rgba(47, 90, 40, 46); border-radius: 12px; padding: 0; }
+#shopItem:hover { border-color: #4caf50; background: rgba(255, 255, 255, 215); }
+#shopItem:checked { background: rgba(200, 235, 190, 230); border: 2px solid #2f8a3a; }
+#shopItem:disabled { background: rgba(240, 243, 235, 110); border-color: rgba(47, 90, 40, 26); }
+#shopItem[fresh="true"] { border-color: #f2b705; background: rgba(255, 248, 220, 235); }
 #shopNew {
   background: #f2b705; color: #ffffff; border-radius: 6px;
   font-size: 9px; font-weight: 800; padding: 0 3px;
@@ -67,23 +76,23 @@ QPushButton[kind="big"] { font-size: 16px; font-weight: 700; min-height: 40px; }
 #shopIcon { font-size: 24px; }
 #shopName { font-weight: 700; font-size: 12px; }
 #shopCost { font-weight: 700; font-size: 12px; color: #a0683c; }
-#shopCost:disabled { color: #d9480f; }
-#shopDesc { font-size: 11px; color: #64735a; }
+#shopCost:disabled { color: #c0410c; }
+#shopDesc { font-size: 11px; color: #55644b; }
 #nextWave { color: #24331c; font-size: 14px; font-weight: 600; }
-#shopName:disabled, #shopDesc:disabled { color: #a3ad99; }
+#shopName:disabled, #shopDesc:disabled { color: #7f8a75; }
 #shopKey {
-  background: #ffffff; border: 1px solid #d6e3c6; border-radius: 6px;
-  font-size: 11px; font-weight: 700; color: #64735a; padding: 0 5px;
+  background: rgba(255, 255, 255, 205); border: 1px solid rgba(47, 90, 40, 50); border-radius: 6px;
+  font-size: 11px; font-weight: 700; color: #55644b; padding: 0 5px;
 }
 
-#towerPanel { background: #f4f8ec; border: 1px solid #d6e3c6; border-radius: 12px; }
+#towerPanel { background: rgba(255, 255, 255, 150); border: 1px solid rgba(47, 90, 40, 46); border-radius: 12px; }
 #tpIcon { font-size: 26px; }
 #tpName { font-size: 16px; font-weight: 800; }
-#tpLevel { color: #64735a; }
+#tpLevel { color: #55644b; }
 
-#overlay { background: rgba(20, 32, 14, 140); }
-#card { background: #ffffff; border-radius: 18px; }
-#overlayTitle { font-size: 26px; font-weight: 800; color: #2f8a3a; }
+#overlay { background: rgba(20, 32, 14, 100); }
+#card { background: rgba(250, 253, 246, 240); border: 1px solid rgba(255, 255, 255, 160); border-radius: 18px; }
+#overlayTitle { font-size: 26px; font-weight: 800; color: #22702c; }
 #overlayText { font-size: 15px; }
 )";
 
@@ -296,8 +305,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
 QWidget *MainWindow::buildHeader() {
     auto *header = new QWidget;
+    header->setObjectName("header");
+    header->setAttribute(Qt::WA_StyledBackground);   // glass bar (immersive)
     auto *h = new QHBoxLayout(header);
-    h->setContentsMargins(0, 0, 0, 0);
+    h->setContentsMargins(10, 6, 10, 6);
     h->setSpacing(10);
     h->addWidget(label("Garden Guard++", "title"));
     h->addStretch(1);
