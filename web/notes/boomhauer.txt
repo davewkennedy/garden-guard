@@ -59,3 +59,6 @@ Verified: Node checks for data/audio, plus a headless Chromium test page for jou
   Chrome 105 and kills whole selector lists. portrait.css no longer depends on it (right column = plant panel OR info,
   hints under the shop; :has only polishes) and its combined lists are split. Bill: phone.css:61 split. style.css:10
   overscroll-behavior (Safari 16) is harmless. Portrait re-verified.
+15:45 FINAL on dist/gardenguard-web (built 15:40:39): PASS. kbtest 36/36; sound 29/29 names fire (1300 real buffer
+  starts on autopilot maps 5-7, plus the scripted map-2 run); portrait 24/24 OK (768x1024 and 820x1180, touch and mouse,
+  6 scenes); no page errors.

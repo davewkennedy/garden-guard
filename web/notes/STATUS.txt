@@ -36,10 +36,53 @@ FEATURE FREEZE 15:40 · final regression on dist 15:42-15:48 · reports by 15:48
 - 15:10 Browser campaign on the latest code (android size, speed 20): WON, 0 errors.
 - 15:11 Dale: touch-only E2E 7/7 PASS; iphone-portrait rotate, iPad, iPad portrait, SE all PASS.
   Finding: phone panel buttons 26 px tall -> Bill raising to 34-36 px.
-- In progress: iPad portrait (Boomhauer, css/portrait.css), phone perf (Bobby), touch-only E2E (Dale),
+- 15:16 Boomhauer: iOS 15.4+ / Chrome 100+ compatibility audit: JS clean, :has() made non-essential.
+- 15:13-15:39 Hank: soak runs on every size (PC, iPad, iPad portrait, iPhone, SE, Android), all 0 errors.
+- 15:40 FEATURE FREEZE. Bill: final sw.js (22 files, ggweb-f4ec1fe27c). Hank: dist built, snapshot web-3-final.
+- 15:41 Final regression on dist running (all four helpers + a full campaign by Hank).
+- 15:42 Bill FINAL PASS: dist installable + offline (22 files, ggweb-f4ec1fe27c), resume 16/16.
+- 15:43 Bobby FINAL PASS: 13/13 visual shots on dist, 0 blank, 0 errors; showcase in shots/showcase/ (10 PNGs).
+- 15:45 Hank FINAL: full campaign on dist at iPhone size WON (0 errors); zip unpacks to the full game and passes touch QA;
+  spot checks on dist at every size pass.
+- 15:45 WRAP-UP called by the user. Dale's final-qa.sh and Boomhauer's kbtest/sound on dist were still running
+  (both passed on the source build minutes earlier: E2E 7/7 + all sizes; keyboard/mouse 36/36 + all 29 sounds).
+
+- 15:48 Dale FINAL PASS: final-qa.sh 15/15 on dist (all sizes, strict touch E2E on iphone + se, autopilot, Node parity exact).
+
+- 15:48 Boomhauer FINAL PASS: kbtest 36/36, sound 29/29, iPad portrait 24/24 on dist, no page errors.
+- ALL FOUR FINAL CHECKS PASS on the final build.
+
+## FINAL STATE (15:45)
+- Play on PC: double-click index.html. Upload: dist\gardenguard-web.zip (or dist\gardenguard-web\) to an https host.
+- Real-phone checks: PHONE-TEST-CHECKLIST.txt. Setup + controls: README.txt.
+- Snapshot: ~/projects/snapshots/gardenguard-web-3-final.tar. The Qt version is untouched.
+- (earlier) In progress: iPad portrait (Boomhauer, css/portrait.css), phone perf (Bobby), touch-only E2E (Dale),
   checkpoint test + intro fit + README (Bill).
 
 ## Backlog (future sessions, not this port)
+- NEW TEAM ROLE, later (user, 2026-11-20): "business & compliance research" agent, stood up when in-app purchase
+  work starts (likely after Thanksgiving). Scope: research (payments, app-store rules, COPPA, VAT/sales tax, LLC),
+  question lists for a real lawyer/accountant, DRAFT ToS/privacy/refund policies for legal review, a pre-launch
+  checklist. NOT legal advice. Reports to Hank; the user decides. The user picks the name.
+- IN-APP PURCHASES (user's daughter's idea; see the power-ups item below). Start simple (tip jar / supporter);
+  resolve the IP/originality question before charging money.
+- USER IDEA 1 (2026-11-20), "immersive board": the white frame around the board is jarring. Extend the garden
+  (grass, the path running in from the entrance and out past the house, decorations, season, weather) beyond the
+  fixed board to fill the whole screen, with a subtle cue for where planting is allowed. Both Qt and web. To discuss.
+- USER IDEA 2 (2026-11-20): make the shop/side panel and the header blend into that immersive garden while staying
+  attractive AND clearly defined/functional. Styles to mock up: frosted glass, garden-themed (wooden sign/bench,
+  seed-packet cards), or a hybrid. Keep contrast and tap sizes. Qt needs its own approach to translucency/blur.
+- PINNED TALK (user, 2026-11-20, "maybe this weekend"): management. What bad managers do, and WHY the things
+  the user does count as good management (not just a list). Circle back; the user wants to dig in.
+- HIGH-LEVEL SDLC DISCUSSION (user, 2026-11-20), together with source control: team dynamics and process
+  (scrum / agile / kanban / waterfall / V-model...), velocity tracking (add a "done" column to usage-log.txt),
+  definition of done, testing strategy. Discussion only.
+- SOURCE CONTROL (user, 2026-11-20): DISCUSS the approach first; set nothing up until the user agrees and says go.
+  Scope: the Qt versions in WSL (garden, garden-plus, garden-plusplus) and gardenguard++web. Topics: layout,
+  .gitignore (build/, dist/, shots/), remote (GitHub) or local-only.
+- Back-port to Qt (user said "not yet", 2026-11-20): 1) end-card star names wrong after Continue (bug),
+  2) fixed 1/60 s steps, 3) Resume your run, 4) wheel zoom + drag pan, 5) "✕ Cancel focus" button,
+  + check the Qt plant panel with 11 plants on a smaller window. ~30-45 min without zoom, ~1 h with.
 - Power-ups (user idea via Peggy): first with in-game coins/stars, e.g. "Fertilizer: plants fire 2x for 10 s",
   "Bug spray: damage everything on screen". Real-money purchases deferred: needs payments + a server
   (localStorage saves are easy to cheat), native wrappers for app-store purchases (15-30% fee), legal/tax,

@@ -45,3 +45,5 @@ QA: a scratch harness in my scratchpad renders maps 0/4/6/9 at PC 1280x800 and p
   like main.js (rounded rect). Phone map shots: 6/10 blank before, 13/13 fine in two runs after.
 15:13 Final perf at dpr 2 (4x throttle, map 10 wave 4): draw avg 7.2 / 4.8 / 7.0 ms (zoom 1 / zoom 4 / pinch),
   pinch max 37 ms (was 371). Whole headless frame 65 / 34 / 41 ms (was 106 / 66 / 80 at dpr 3).
+15:43 FINAL: PASS on dist (15:40:40): 13/13 shots rendered with 0 errors. 10 showcase PNGs are in shots/showcase/
+  (real-time CDP captures; scripts: scratchpad qa/showcase.js and qa/final.sh).

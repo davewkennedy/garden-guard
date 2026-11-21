@@ -53,6 +53,10 @@ button, full-screen icon, tablets in portrait).
 18/18 phone scenes fit.
 Freeze moved to 15:40: make-sw-list + README final, tell Hank; 15:42-15:48: pwa-check + resume against dist;
 PASS/FAIL by 15:48.
+15:16 Split phone.css's combined :has() rule (Boomhauer's compatibility audit: Chrome < 105 drops the whole rule).
+15:40 FREEZE: sw.js final (22 files, ggweb-f4ec1fe27c), README final.
+15:42 FINAL on dist/gardenguard-web: PASS. sw.js matches the source, the CACHE hash matches the dist contents,
+pwa-check is installable + offline OK, the resume test is 16/16.
 Registration snippet for main.js (Hank adds it):
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol))
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
