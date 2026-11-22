@@ -24,6 +24,8 @@ Team: Bobby (renderer.js/view.js: outer garden, path, weather, plantable cue), B
   same layout minimums as before, not a renderer issue) -> fits the existing Qt back-port backlog item. Hank: sw.js ggweb-3b390b7b40, dist rebuilt.
 - 00:55 Hank: final-qa on source after the perf fix: 15/15 PASS.
 - 00:56 Bill FINAL on dist: sw.js matches (23 files, ggweb-3b390b7b40), pwa-check PASS (installable, offline), resume 16/16. Bill done.
+- 01:02 Hank: final-qa on dist 15/15 PASS. After shots + shots/immersive/compare.html. MORNING-SUMMARY.txt written.
+- 01:05 PHASE 1 DONE. Final snapshot immersive-8-final. Fallback wake-up cancelled. Waiting for the user to review.
 
 ----- (below: the web port board, kept for history) -----
 
