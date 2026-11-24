@@ -1,7 +1,45 @@
-Garden Guard: a tower-defense game in two versions that play identically.
+GARDEN GUARD++
+==============================================================================
+A cozy tower-defense game, built twice: a C++/Qt desktop version and a
+plain HTML/CSS/JavaScript version for browsers and phones. The two play
+identically, rule for rule, and a parity test proves it.
 
-  qt/   desktop version, C++ / Qt 6 (build with CMake; see qt/README.md)
-  web/  browser + phone version, plain HTML/CSS/JS (open web/index.html; see web/README.txt)
+  Play it now (browser or phone, held sideways):
+  https://davidwkennedy.com/gardenplus
 
-Every gameplay change goes into BOTH versions; web/tools/parity.js checks they match exactly.
-History before this repo existed was rebuilt from dated folder copies and snapshots.
+Bugs march along the garden path, or fly along sky lanes, toward your
+house. Plant defenders to stop them. Clear 10 maps x 5 waves, from spring
+to winter, to win the campaign.
+
+------------------------------------------------------------------------------
+WHAT'S HERE
+------------------------------------------------------------------------------
+  qt/   desktop version, C++20 / Qt 6 (CMake). How to play, controls and
+        build steps: qt/README.md
+  web/  browser + phone version: no build step, no server, no libraries.
+        Open web/index.html, or see web/README.txt to host it.
+
+Every gameplay change goes into BOTH versions. web/tools/parity.js runs
+the same headless autopilot campaigns in the web engine and compares every
+wave (lives, coins, plants) with a baseline captured from the Qt build.
+Other checks live in web/tools/ (end-to-end touch tests, installability
+and offline checks, screenshots).
+
+------------------------------------------------------------------------------
+HOW IT WAS BUILT
+------------------------------------------------------------------------------
+Designed and directed by David Kennedy and written by a team of Claude
+Code agents: a tech lead coordinating several specialist agents. David set
+the goals, played it, and made the calls. Real playtesting on phones drove
+changes such as the phone layouts and the backlog of save-slot ideas.
+
+The history before this repository existed was rebuilt from dated folder
+copies and snapshots, so the early commits show the real order of work:
+the original HTML prototype -> Qt port -> Garden Guard+ -> Garden Guard++
+-> the web port. The "immersive" branch holds an alternative visual
+direction (the garden continues past the board).
+
+------------------------------------------------------------------------------
+LICENSE
+------------------------------------------------------------------------------
+MIT (see LICENSE). Copyright (c) 2026 David Kennedy.
