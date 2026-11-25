@@ -23,6 +23,7 @@ run e2e-iphone      tools/e2e-touch.js --page "$PAGE" --size iphone --strict
 run e2e-se          tools/e2e-touch.js --page "$PAGE" --size se --strict
 run auto-speed3     tools/browser-run.js --page "$PAGE" --query "autopilot=1&speed=3" --seconds 60 --shot shots/qa-auto.png
 run music           tools/music-check.js     # serves web/ itself (the music module, its settings, the header icons, sw.js audio list)
+run music-offline  tools/music-offline-check.js   # the SW cache holds the audio and the music starts with the server stopped
 node tools/parity.js > shots/qa-parity.log 2>&1 && echo "PASS parity (node, exact C++)" || { echo "FAIL parity"; fails=$((fails+1)); }
 date +%T
 [ $fails -eq 0 ] && echo "QA PASS" || echo "QA FAIL ($fails)"
