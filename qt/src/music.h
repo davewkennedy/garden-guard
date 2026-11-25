@@ -10,6 +10,12 @@
 //    MUSIC_FADE_MS when the stinger ends; after Won / Lost it stays ducked
 //    until the next run starts the build loop fresh.
 //  - Pause and game speed don't touch the music.
+//  - Maps (Dale): every map has its own build and wave loop, as on the web. Map index 0
+//    (Sunny Meadow, and every menu) plays "build"/"wave"; map index i > 0 plays
+//    "build-m<i+1>"/"wave-m<i+1>" (music.json "maps"). setMap() crossfades over
+//    MUSIC_FADE_MS like a phase change. A map's loops are decoded when it is first
+//    shown; only the current map's loops, Sunny Meadow's build loop (menus) and the
+//    stingers stay decoded, other tracks are freed once no lane plays them.
 //  - Settings (separate from SFX): "music" on/off (default on) and
 //    "musicVolume" 0..1 (default 0.6); gain = MUSIC_GAIN * volume (linear,
 //    as on the web). Off fades out over
@@ -21,6 +27,7 @@
 
 #include <map>
 #include <QIODevice>
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <algorithm>
@@ -36,11 +43,20 @@ constexpr int MUSIC_OFF_MS = 300;
 constexpr float MUSIC_DUCK = 0.25f;
 constexpr float MUSIC_DEFAULT_VOLUME = 0.6f;
 constexpr float MUSIC_GAIN = 0.1f;    // -20 dB: the files are ~-21 LUFS, the SFX much quieter (Hank, Dale)
+constexpr int MAP_COUNT = 10;
+
+// The loop a map plays (mapIndex 0-based, as Game::mapIndex); out of range -> Sunny Meadow. Same rule as the web.
+inline QString loopName(int mapIndex, bool wave) {
+    const QString p = wave ? QStringLiteral("wave") : QStringLiteral("build");
+    const int n = mapIndex + 1;
+    return n > 1 && n <= MAP_COUNT ? p + QStringLiteral("-m") + QString::number(n) : p;
+}
 
 struct Track {
     std::vector<float> pcm;   // mono, RATE
     size_t loopStart = 0, loopEnd = 0;   // loops only; loopEnd == 0: a one-shot
     bool ready = false;
+    bool decoding = false;    // a decoder still writes into pcm: never free it then
 };
 
 // A ramp toward a target over a number of samples (linear in "level").
@@ -104,12 +120,16 @@ public:
     void follow(Phase phase);
     // A fresh run or map: the next follow() restarts the build loop from bar 1.
     void restart() { lastPhase_ = -1; }
+    // The map on screen (0-based; 0 for menus). Cheap and idempotent; a change crossfades to its loop.
+    void setMap(int mapIndex);
+    int map() const { return map_; }
+    QString loopName() const { return loopName_; }   // the loop the game wants now (tests)
 
     bool enabled() const { return enabled_; }
     void setEnabled(bool on);       // saved ("music")
     float volume() const { return volume_; }
     void setVolume(float v);        // 0..1, saved ("musicVolume")
-    bool ready() const;             // every track decoded
+    bool ready() const;             // every track asked for so far is decoded
     const music::Source *source() const { return source_; }   // tests
     const music::Track *track(const QString &name) const {
         auto it = tracks_.find(name);
@@ -118,6 +138,8 @@ public:
 
 private:
     void load(const QString &name, const QString &file, bool loop, size_t loopStart, size_t loopEnd);
+    void ensureLoaded(const QString &name);   // a loop from music.json, decoded once
+    void evict();                             // free tracks no map needs now (see above)
     void startSink();
     void playLoop(const QString &name, bool fresh);
     void playStinger(const QString &name, bool restore);
@@ -128,7 +150,9 @@ private:
     bool failed_ = false;
     bool withDevice_ = true;
     int lastPhase_ = -1;
+    int map_ = 0;
     QString loopName_;
+    QJsonObject meta_;   // music.json
     std::map<QString, music::Track> tracks_;   // node-based: Track addresses stay valid
     QAudioSink *sink_ = nullptr;
     music::Source *source_ = nullptr;

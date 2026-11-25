@@ -8,12 +8,14 @@
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSettings>
 #include <QTimer>
 #include <cmath>
 #include <map>
+#include <set>
 #include <cstdio>
 
 using namespace music;
@@ -172,31 +174,57 @@ static void realFiles() {
         return;
     }
     const QJsonObject meta = QJsonDocument::fromJson(jf.readAll()).object();
-    struct F { const char *name, *file; bool loop; };
-    for (const F &f : {F{"build", "music-build.mp3", true}, F{"wave", "music-wave.mp3", true},
-                       F{"win", "stinger-win.mp3", false}, F{"lose", "stinger-lose.mp3", false}}) {
-        const auto pcm = decode(QString::fromLatin1(f.file));
+    struct F { QString name, file; bool loop; };
+    std::vector<F> files = {F{"build", "music-build.mp3", true}, F{"wave", "music-wave.mp3", true},
+                            F{"win", "stinger-win.mp3", false}, F{"lose", "stinger-lose.mp3", false}};
+    // Every map's own loops (music.json "maps"), and they agree with music::loopName (the web's rule too).
+    const QJsonArray maps = meta.value("maps").toArray();
+    check(maps.size() == MAP_COUNT, qPrintable(QString("music.json lists %1 maps (want %2)").arg(maps.size()).arg(MAP_COUNT)));
+    QStringList names;
+    for (int i = 0; i < maps.size(); i++) {
+        const QJsonObject mp = maps.at(i).toObject();
+        const QString b = mp.value("build").toString(), w = mp.value("wave").toString();
+        check(b == loopName(i, false) && w == loopName(i, true),
+              qPrintable(QString("map %1 (%2): music.json loops %3/%4 = loopName()").arg(i + 1).arg(mp.value("title").toString(), b, w)));
+        names << b << w;
+        if (i > 0)
+            for (const QString &n : {b, w}) files.push_back(F{n, meta.value(n).toObject().value("file").toString(), true});
+    }
+    names.removeDuplicates();
+    check(names.size() == 2 * MAP_COUNT, "every map has its own two loops (20 different loops)");
+    for (const F &f : files) {
+        const auto pcm = decode(f.file);
         check(!pcm.empty(), qPrintable(QString("%1 decodes (%2 samples, %3 s)").arg(f.file).arg(pcm.size())
                                            .arg(pcm.size() / double(RATE), 0, 'f', 3)));
         if (!f.loop || pcm.empty()) continue;
-        const QJsonObject t = meta.value(QLatin1String(f.name)).toObject();
+        const QJsonObject t = meta.value(f.name).toObject();
         size_t s = size_t(t.value("loop_start").toDouble(std::llround(t.value("loopStart").toDouble(0.5) * RATE)));
         size_t e = size_t(t.value("loop_end").toDouble(std::llround(t.value("loopEnd").toDouble() * RATE)));
         check(e > s && e <= pcm.size(), qPrintable(QString("%1 loop window [%2, %3) inside the decoded audio").arg(f.name).arg(s).arg(e)));
         if (!(e > s && e <= pcm.size())) continue;
         // Periodicity: compare 0.5 s after loop_end with 0.5 s after loop_start (RMS of the difference
         // vs RMS of the signal). A wrong window (e.g. off by the decoder delay) shows up as a large ratio.
-        const size_t n = std::min<size_t>(RATE / 2, pcm.size() - e);
-        double diff = 0, sig = 0;
-        for (size_t k = 0; k < n; k++) {
-            const double d = pcm[e + k] - pcm[s + k];
-            diff += d * d;
-            sig += double(pcm[s + k]) * pcm[s + k];
-        }
-        const double ratio = sig > 0 ? std::sqrt(diff / sig) : 1;
-        check(n > RATE / 10 && ratio < 0.05,
-              qPrintable(QString("%1 seam: the audio after loop_end repeats loop_start (rms diff %2%)")
-                             .arg(f.name).arg(ratio * 100, 0, 'f', 2)));
+        // The residual at the right window is MP3 codec noise: tiny for the 80 kbps Sunny Meadow loops
+        // (< 5%), up to ~20% for bright, noisy 64 kbps map loops (plucks, hats), while ANY misalignment
+        // is far worse (one sample: ~1.6x; a decoder delay of 529/1105/1152 samples: 70-180%). So the
+        // check is that the window is exact: lag 0 beats lags of +-1 sample and is at most a third of
+        // the decoder-delay lags (and < 25%). Audible seams are build.js's splice check.
+        const size_t tail = pcm.size() - e, n = tail > 1200 ? std::min<size_t>(RATE / 2, tail - 1200) : 0;
+        auto ratioAt = [&](long lag) {
+            double diff = 0, sig = 0;
+            for (size_t k = 0; k < n; k++) {
+                const double d = pcm[size_t(long(e + k) + lag)] - pcm[s + k];
+                diff += d * d;
+                sig += double(pcm[s + k]) * pcm[s + k];
+            }
+            return sig > 0 ? std::sqrt(diff / sig) : 1;
+        };
+        const double ratio = ratioAt(0), near = std::min(ratioAt(1), ratioAt(-1));
+        const double far = std::min({ratioAt(529), ratioAt(1105), ratioAt(1152), ratioAt(-529), ratioAt(-1105)});
+        check(n > RATE / 10 && ratio < 0.25 && ratio < near && ratio * 3 < far,
+              qPrintable(QString("%1 seam: the audio after loop_end repeats loop_start, window exact (rms diff %2%; "
+                                 "1 sample off %3%, a decoder delay off %4%)")
+                             .arg(f.name).arg(ratio * 100, 0, 'f', 2).arg(near * 100, 0, 'f', 1).arg(far * 100, 0, 'f', 0)));
     }
 }
 
@@ -285,6 +313,68 @@ static void followGame() {
     QSettings().remove("musicVolume");
 }
 
+// 7. Maps (Dale): each map picks its own loops; a map change crossfades; menus (map 0) play Sunny Meadow's
+//    build loop; tracks of maps no longer shown are freed.
+static void mapsPickTheirOwnTracks() {
+    QCoreApplication::setOrganizationName("GardenGuardTest");
+    Music m(nullptr, false);
+    auto waitDecoded = [&](const QString &name) {
+        QEventLoop wait;
+        QTimer poll;
+        QObject::connect(&poll, &QTimer::timeout, [&] { if (m.track(name) && m.track(name)->ready) wait.quit(); });
+        poll.start(20);
+        QTimer::singleShot(30000, &wait, &QEventLoop::quit);
+        wait.exec();
+        return m.track(name) && m.track(name)->ready;
+    };
+    if (!waitDecoded("build")) { check(false, "maps: Sunny Meadow's build loop decodes"); return; }
+    m.follow(Phase::Build);
+    auto *s = m.source();
+    auto pump = [&](int ms) { render(const_cast<Source &>(*s), ms * RATE / 1000); };
+    auto playing = [&]() -> const Track * { return s->playing() ? s->playing()->track : nullptr; };
+    pump(MUSIC_DUCK_MS + 20);
+    std::set<QString> seen;   // by name: a freed track's memory can be reused by the next one
+    bool allOwn = true;
+    for (int i = 0; i < MAP_COUNT; i++) {
+        for (bool wave : {false, true}) {
+            m.setMap(i);
+            m.follow(wave ? Phase::Wave : Phase::Build);
+            const QString want = loopName(i, wave);
+            const bool decoded = waitDecoded(want);
+            pump(MUSIC_FADE_MS + 100);
+            const bool ok = decoded && m.loopName() == want && playing() == m.track(want) && s->lanes.size() == 1;
+            if (!ok) allOwn = false;
+            check(ok, qPrintable(QString("map %1 %2: plays %3").arg(i + 1).arg(wave ? "wave" : "build", want)),
+                  QString("loopName %1, decoded %2, lanes %3").arg(m.loopName()).arg(decoded).arg(s->lanes.size()));
+            if (ok) seen.insert(want);
+        }
+        if (i == 4) {   // a map change in the middle of a wave crossfades to the new map's wave loop
+            m.setMap(5);
+            const bool fadesOut = s->lanes.size() >= 1 && playing() == m.track(loopName(4, true));   // old one plays until the new one is decoded
+            waitDecoded(loopName(5, true));
+            check(fadesOut && playing() == m.track(loopName(5, true)) && s->lanes.size() == 2,
+                  "a map change during a wave crossfades from the old map's wave loop to the new one's");
+            pump(MUSIC_FADE_MS + 100);
+            m.follow(Phase::Build);
+            pump(MUSIC_FADE_MS + 100);
+        }
+        // only the current map's loops, Sunny Meadow's build loop and the stingers stay decoded (the crossfades are
+        // over, so nothing else may be kept)
+        int other = 0;
+        for (int j = 0; j < MAP_COUNT; j++)
+            for (bool w : {false, true})
+                if (j != m.map() && m.track(loopName(j, w)) && loopName(j, w) != "build") other++;
+        if (other > 0) { check(false, qPrintable(QString("map %1: other maps' tracks are freed").arg(m.map() + 1)), QString("%1 kept").arg(other)); allOwn = false; }
+    }
+    check(allOwn && seen.size() == 2 * MAP_COUNT, qPrintable(QString("every map picks its own build and wave loop (%1 different tracks played)").arg(seen.size())));
+    m.setMap(0);   // back to a menu
+    m.follow(Phase::Build);
+    pump(MUSIC_FADE_MS + 100);
+    check(playing() == m.track("build") && m.loopName() == "build", "menus (map 0): Sunny Meadow's build loop");
+    QSettings().remove("music");
+    QSettings().remove("musicVolume");
+}
+
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     seam();
@@ -293,6 +383,7 @@ int main(int argc, char **argv) {
     offFade();
     realFiles();
     followGame();
+    mapsPickTheirOwnTracks();
     std::printf(fails ? "%d FAILED\n" : "ALL PASS\n", fails);
     return fails ? 1 : 0;
 }

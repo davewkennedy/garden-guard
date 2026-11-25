@@ -11,9 +11,15 @@
 // audio/music.json (Dale): { "build": { "loopStart": 0.5, "loopEnd": 65.95, "loop": 65.45, "bpm": 88 }, "wave": {...},
 //   "win": {...}, "lose": {...} }, in seconds; optional "file" per track. The loop files hold 0.5 s of lead-in and
 // a wrapped tail around the window, so playback starts AT loopStart (bar 1) and loops loopStart..loopEnd.
-// API: Music.unlock() (every gesture; cheap), Music.setPhase('build'|'wave'), Music.stinger('win'|'lose', hold),
+// API: Music.unlock() (every gesture; cheap), Music.follow(mapIndex, 'build'|'wave') (every frame; cheap),
+//      Music.setPhase('build'|'wave'), Music.setMap(mapIndex), Music.stinger('win'|'lose', hold),
 //      Music.release() (a new run begins: bring a held loop back), Music.enabled() / setEnabled(on),
 //      Music.volume() / setVolume(0..1), Music.state() (for tests).
+// MAPS (Dale): every map has its own build and wave loop. Map index 0 (Sunny Meadow, also every menu) plays
+// "build"/"wave"; map index i > 0 plays "build-m<i+1>"/"wave-m<i+1>" (music-build-m2.mp3 ... music-wave-m10.mp3,
+// listed in music.json "maps"). Changing map crossfades like a phase change. Only the current map's loops,
+// Sunny Meadow's build loop (the menus) and the stingers stay decoded; other maps' buffers are dropped once
+// they have faded out (a decoded 30 s loop is several MB on a phone). Qt (music.cpp) does the same.
 // Failure (no Web Audio, files missing offline, undecodable) means silence, never an exception.
 var Music = (function () {
   'use strict';
@@ -29,6 +35,16 @@ var Music = (function () {
     win: { file: 'stinger-win.mp3', loop: false },
     lose: { file: 'stinger-lose.mp3', loop: false },
   };
+  var MAP_COUNT = 10;
+  for (var mi = 2; mi <= MAP_COUNT; mi++) {
+    TRACKS['build-m' + mi] = { file: 'music-build-m' + mi + '.mp3', loop: true };
+    TRACKS['wave-m' + mi] = { file: 'music-wave-m' + mi + '.mp3', loop: true };
+  }
+  // The loop a map plays in a phase. mapIndex is 0-based (as game.mapIndex); anything unknown -> Sunny Meadow.
+  function loopName(mapIndex, phase) {
+    var p = phase === 'wave' ? 'wave' : 'build', n = (mapIndex | 0) + 1;
+    return n > 1 && n <= MAP_COUNT ? p + '-m' + n : p;
+  }
   var FADE = 1.5;             // seconds: crossfade between loops, first fade-in, the loop coming back after a stinger
   var OFF_FADE = 0.3;         // seconds: turning music off
   var DUCK_GAIN = 0.25, DUCK_DOWN = 0.2;   // loop level while a stinger plays, and how fast it gets there
@@ -42,7 +58,9 @@ var Music = (function () {
 
   var ctx = null, failed = false, master = null, duck = null;
   var gestured = false;                 // true once unlock() has run inside a gesture
-  var want = 'build';                   // the loop the game wants right now
+  var mapNow = 0, phaseNow = 'build';   // what the game shows (map index, phase)
+  var want = 'build';                   // the loop the game wants right now: loopName(mapNow, phaseNow)
+  var fading = {};                      // name -> loops of that name still fading out (their buffers are kept)
   var cur = null;                       // { name, src, gain }: the loop that is playing
   var buffers = {};                     // name -> AudioBuffer (decoded once)
   var loading = {};                     // name -> Promise (fetch + decode in flight)
@@ -95,13 +113,27 @@ var Music = (function () {
     return fetch(BASE + 'music.json').then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) { if (j && typeof j === 'object') meta = j; }).catch(function () { /* optional file */ });
   }
-  // Lazy order: the build loop first (it is what plays), then the wave loop, then the stingers, one at a time,
-  // so phones don't decode four files at once while the game starts.
+  // Lazy order: the loop that plays first, then the same map's other loop, then the stingers, one at a time,
+  // so phones don't decode several files at once while the game starts.
   function preload() {
     if (preloadStarted) return;
     preloadStarted = true;
-    load('build').then(function () { apply(); return load('wave'); })
+    var first = want;
+    load(first).then(function () { apply(); return load(first === loopName(mapNow, 'wave') ? loopName(mapNow, 'build') : loopName(mapNow, 'wave')); })
       .then(function () { return load('win'); }).then(function () { return load('lose'); }).catch(function () {});
+  }
+  // A new map: decode its other loop in the background (the one it plays now is loaded by apply()).
+  function preloadMap() {
+    if (!ctx) return;
+    load(loopName(mapNow, phaseNow === 'wave' ? 'build' : 'wave'));
+  }
+  // Drop decoded loops no longer needed: keep this map's two loops, Sunny Meadow's build loop (menus), the
+  // stingers, whatever plays, and anything still fading out.
+  function evict() {
+    var keep = { build: true, win: true, lose: true };
+    keep[loopName(mapNow, 'build')] = keep[loopName(mapNow, 'wave')] = true;
+    if (cur) keep[cur.name] = true;
+    for (var k in buffers) if (!keep[k] && !fading[k]) delete buffers[k];
   }
   // Loop window in seconds: the manifest's loopStart/loopEnd (or loopStart 0.5 + "loop"); else the whole buffer.
   function windowOf(name, b) {
@@ -145,14 +177,22 @@ var Music = (function () {
     var t0 = ctx.currentTime;
     fade(l.gain, false, t0, fadeOut);
     try { l.src.stop(t0 + fadeOut + 0.05); } catch (e) { /* already stopped */ }
-    setTimeout(function () { try { l.src.disconnect(); l.gain.disconnect(); } catch (e) { /* */ } }, (fadeOut + 0.3) * 1000);
+    fading[l.name] = (fading[l.name] || 0) + 1;
+    setTimeout(function () {
+      try { l.src.disconnect(); l.gain.disconnect(); } catch (e) { /* */ }
+      if (--fading[l.name] <= 0) delete fading[l.name];
+      evict();
+    }, (fadeOut + 0.3) * 1000);
   }
   // Make the playing loop match `want` (crossfade). Called on phase changes, after loads and on resume.
   // force: start `want` again from bar 1 even if it is already playing (a new run).
   function apply(force) {
     if (!enabled || !running()) return;
     if (cur && cur.name === want && !force) return;
-    if (!buffers[want]) { load(want).then(function () { apply(force); }); return; }   // keep what plays until it is decoded
+    if (!buffers[want]) {   // keep what plays until it is decoded (a file that failed waits for the next gesture)
+      if (!lost[want]) load(want).then(function (b) { if (b) apply(force); });
+      return;
+    }
     var old = cur;
     cur = startLoop(want, FADE);
     if (old) stopLoop(old, FADE);
@@ -175,12 +215,19 @@ var Music = (function () {
     apply();
   }
 
-  function setPhase(p) {
-    var w = p === 'wave' ? 'wave' : 'build';
+  // The game's map (0-based) and phase; one crossfade even when both change at once. Cheap when nothing changed.
+  function follow(mapIndex, phase) {
+    var m = Math.max(0, Math.min(MAP_COUNT - 1, mapIndex | 0)), p = phase === 'wave' ? 'wave' : 'build';
+    var newMap = m !== mapNow;
+    mapNow = m; phaseNow = p;
+    var w = loopName(m, p);
     if (w === want) return;
     want = w;
     apply();
+    if (newMap) { preloadMap(); evict(); }
   }
+  function setPhase(p) { follow(mapNow, p); }
+  function setMap(i) { follow(i, phaseNow); }
 
   // Play a stinger over the loop, ducking the loop. hold = the run is over (Won/Lost): the loop stays ducked
   // until release(); otherwise it comes back over FADE as the stinger rings out.
@@ -244,11 +291,12 @@ var Music = (function () {
   });
 
   return {
-    unlock: unlock, setPhase: setPhase, stinger: stinger, release: release,
+    unlock: unlock, follow: follow, setPhase: setPhase, setMap: setMap, loopName: loopName, stinger: stinger, release: release,
     enabled: function () { return enabled; }, setEnabled: setEnabled,
     volume: function () { return volume; }, setVolume: setVolume,
     state: function () {   // for tests and the console
       return { enabled: enabled, volume: volume, ctx: ctx ? ctx.state : null, want: want, playing: cur ? cur.name : null,
+        map: mapNow, phase: phaseNow, fading: Object.keys(fading),
         loaded: Object.keys(buffers), lost: Object.keys(lost), failed: failed, held: held, stingerUntil: stingerUntil,
         duck: duck ? duck.gain.value : null, master: master ? master.gain.value : null, curGain: cur ? cur.gain.gain.value : null, lastFadeFrom: lastFadeFrom,
         loopWindow: cur && buffers[cur.name] ? windowOf(cur.name, buffers[cur.name]) : null };

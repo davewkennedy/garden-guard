@@ -100,19 +100,57 @@ Music::Music(QObject *parent, bool withDevice) : QObject(parent), withDevice_(wi
     volume_ = std::clamp(settings.value("musicVolume", double(MUSIC_DEFAULT_VOLUME)).toFloat(), 0.f, 1.f);
 
     QFile jf(QStringLiteral(":/audio/music.json"));
-    QJsonObject meta;
-    if (jf.open(QIODevice::ReadOnly)) meta = QJsonDocument::fromJson(jf.readAll()).object();
+    if (jf.open(QIODevice::ReadOnly)) meta_ = QJsonDocument::fromJson(jf.readAll()).object();
     else qWarning("Garden Guard: music.json missing, music disabled");
-    const double rate = meta.value("rate").toDouble(RATE);
-    for (const Def &d : DEFS) {
+    const double rate = meta_.value("rate").toDouble(RATE);
+    for (const Def &d : DEFS) {   // Sunny Meadow's loops (also the menus) and the stingers, at start
         size_t s = 0, e = 0;
-        const QJsonObject t = meta.value(QLatin1String(d.name)).toObject();
+        const QJsonObject t = meta_.value(QLatin1String(d.name)).toObject();
         if (d.loop && !loopWindow(t, rate, &s, &e)) {
             qWarning("Garden Guard: no loop window for %s, that loop is silent", d.name);
             continue;
         }
         load(QLatin1String(d.name), QLatin1String(d.file), d.loop, s, e);
     }
+}
+
+// A map loop: file and window from music.json ("file", "loop_start"/"loop_end"). Decoded once, on demand.
+void Music::ensureLoaded(const QString &name) {
+    if (tracks_.count(name)) return;
+    const QJsonObject t = meta_.value(name).toObject();
+    size_t s = 0, e = 0;
+    if (!loopWindow(t, meta_.value("rate").toDouble(RATE), &s, &e)) {
+        qWarning("Garden Guard: no loop window for %s, that loop is silent", qPrintable(name));
+        return;
+    }
+    load(name, t.value("file").toString(QStringLiteral("music-") + name + QStringLiteral(".mp3")), true, s, e);
+}
+
+void Music::evict() {
+    const QString keep[] = {QStringLiteral("build"), QStringLiteral("win"), QStringLiteral("lose"),
+                            music::loopName(map_, false), music::loopName(map_, true), loopName_};
+    for (auto it = tracks_.begin(); it != tracks_.end();) {
+        const Track *t = &it->second;
+        // never free a track a decoder may still touch (decoding, or one that failed: it stays, empty and small)
+        bool used = t->decoding || !t->ready || std::find(std::begin(keep), std::end(keep), it->first) != std::end(keep);
+        if (source_) {
+            used = used || source_->stinger == t;
+            for (const Source::Slot &s : source_->lanes) used = used || s.track == t;
+        }
+        it = used ? std::next(it) : tracks_.erase(it);
+    }
+}
+
+void Music::setMap(int mapIndex) {
+    const int m = std::clamp(mapIndex, 0, MAP_COUNT - 1);
+    if (m == map_) return;
+    map_ = m;
+    ensureLoaded(music::loopName(m, false));
+    ensureLoaded(music::loopName(m, true));
+    // Playing a loop: crossfade to the new map's loop for this phase (a stinger/over phase waits for follow()).
+    if (lastPhase_ == int(Phase::Build) || lastPhase_ == int(Phase::Wave))
+        playLoop(music::loopName(m, lastPhase_ == int(Phase::Wave)), false);
+    evict();
 }
 
 Music::~Music() {
@@ -126,6 +164,7 @@ void Music::load(const QString &name, const QString &file, bool loop, size_t loo
         return;
     }
     Track &t = tracks_[name];
+    t.decoding = true;
     auto *dec = new QAudioDecoder(this);
     QAudioFormat fmt;
     fmt.setSampleRate(RATE);
@@ -163,19 +202,25 @@ void Music::load(const QString &name, const QString &file, bool loop, size_t loo
                          t.pcm.size(), loopEnd);
         }
         t.ready = !t.pcm.empty() && (!loop || t.loopEnd > t.loopStart);
+        t.decoding = false;
         dec->deleteLater();
         f->deleteLater();
-        // A loop that finished decoding after its phase began: start it now.
-        if (t.ready && loop && loopName_ == name && source_ && !source_->playing()) playLoop(name, true);
+        // A loop that finished decoding after its phase began (or its map was shown): start it now, or crossfade
+        // to it from the previous map's loop that kept playing meanwhile.
+        if (t.ready && loop && loopName_ == name && source_) {
+            if (!source_->playing()) playLoop(name, true);
+            else if (source_->playing()->track != &t) playLoop(name, false);
+        }
     });
-    connect(dec, qOverload<QAudioDecoder::Error>(&QAudioDecoder::error), this, [dec, name](QAudioDecoder::Error) {
+    connect(dec, qOverload<QAudioDecoder::Error>(&QAudioDecoder::error), this, [dec, name, &t](QAudioDecoder::Error) {
+        t.decoding = false;
         qWarning("Garden Guard: cannot decode %s (%s), it stays silent", qPrintable(name), qPrintable(dec->errorString()));
     });
     dec->start();
 }
 
 bool Music::ready() const {
-    if (tracks_.size() != std::size(DEFS)) return false;
+    if (tracks_.size() < std::size(DEFS)) return false;
     for (const auto &[n, t] : tracks_)
         if (!t.ready) return false;
     return true;
@@ -282,8 +327,8 @@ void Music::follow(Phase phase) {
             source_->restoreAfterStinger = false;
             source_->duck.to(1, prev == int(Phase::MapCleared) ? MUSIC_FADE_MS : MUSIC_DUCK_MS);
         }
-        playLoop(phase == Phase::Build ? QStringLiteral("build") : QStringLiteral("wave"),
-                 prev < 0 || prev == int(Phase::Won) || prev == int(Phase::Lost));
+        playLoop(music::loopName(map_, phase == Phase::Wave), prev < 0 || prev == int(Phase::Won) || prev == int(Phase::Lost));
+        evict();
         break;
     case Phase::MapCleared: playStinger(QStringLiteral("win"), true); break;
     case Phase::Won: playStinger(QStringLiteral("win"), false); break;

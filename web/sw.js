@@ -2,7 +2,7 @@
 // has been opened over https it also plays with no signal.
 // FILES and CACHE are generated: run `bash tools/make-sw-list.sh` after changing the game. It lists every
 // file index.html loads and sets CACHE to a content hash, so phones pick up each new version.
-const CACHE = 'ggweb-a487c663eb';
+const CACHE = 'ggweb-024891869c';
 const FILES = [
   "./",
   "index.html",
@@ -28,7 +28,25 @@ const FILES = [
   "js/scenes.js",
   "js/main.js",
   "icon-512.png",
+  "audio/music-build-m10.mp3",
+  "audio/music-build-m2.mp3",
+  "audio/music-build-m3.mp3",
+  "audio/music-build-m4.mp3",
+  "audio/music-build-m5.mp3",
+  "audio/music-build-m6.mp3",
+  "audio/music-build-m7.mp3",
+  "audio/music-build-m8.mp3",
+  "audio/music-build-m9.mp3",
   "audio/music-build.mp3",
+  "audio/music-wave-m10.mp3",
+  "audio/music-wave-m2.mp3",
+  "audio/music-wave-m3.mp3",
+  "audio/music-wave-m4.mp3",
+  "audio/music-wave-m5.mp3",
+  "audio/music-wave-m6.mp3",
+  "audio/music-wave-m7.mp3",
+  "audio/music-wave-m8.mp3",
+  "audio/music-wave-m9.mp3",
   "audio/music-wave.mp3",
   "audio/music.json",
   "audio/stinger-lose.mp3",
