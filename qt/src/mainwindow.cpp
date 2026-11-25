@@ -3,7 +3,11 @@
 #include "boardwidget.h"
 #include "data.h"
 
+#include <QCheckBox>
 #include <QFormLayout>
+#include <QMenu>
+#include <QSlider>
+#include <QWidgetAction>
 #include <map>
 #include <QFrame>
 #include <QGridLayout>
@@ -324,8 +328,54 @@ QWidget *MainWindow::buildHeader() {
         syncSoundButton();
         sfx("click");   // only audible when turning sound on
     });
-    for (QPushButton *b : {speedBtn_, pauseBtn_, soundBtn_}) h->addWidget(b);
+    musicBtn_ = button(QStringLiteral("🎵"), {}, "iconBtn");
+    musicBtn_->setToolTip("Music settings (M turns music on or off)");
+    connect(musicBtn_, &QPushButton::clicked, this, [this] { sfx("click"); showMusicMenu(); });
+    for (QPushButton *b : {speedBtn_, pauseBtn_, soundBtn_, musicBtn_}) h->addWidget(b);
     return header;
+}
+
+// ---------- music (music.h; same rows and wording as the web's music panel) ----------
+
+void MainWindow::toggleMusic() {
+    music_.setEnabled(!music_.enabled());
+    setProp(musicBtn_, "on", music_.enabled());
+    board_->showToast(music_.enabled() ? QStringLiteral("🎵 Music on") : QStringLiteral("🎵 Music off"));
+}
+
+void MainWindow::showMusicMenu() {
+    auto *menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    auto *box = new QWidget(menu);
+    auto *form = new QFormLayout(box);
+    auto *musicOn = new QCheckBox(box);
+    musicOn->setChecked(music_.enabled());
+    auto *vol = new QSlider(Qt::Horizontal, box);
+    vol->setRange(0, 100);
+    vol->setSingleStep(5);
+    vol->setPageStep(5);
+    vol->setValue(int(std::lround(music_.volume() * 100)));
+    vol->setMinimumWidth(140);
+    auto *sfxOn = new QCheckBox(box);
+    sfxOn->setChecked(audio_.enabled());
+    form->addRow("Music", musicOn);
+    form->addRow("Music volume", vol);
+    form->addRow("Sound effects", sfxOn);
+    connect(musicOn, &QCheckBox::toggled, this, [this](bool on) { if (on != music_.enabled()) toggleMusic(); });
+    connect(vol, &QSlider::valueChanged, this, [this, vol](int v) {
+        const int snapped = (v + 2) / 5 * 5;   // step 5, as on the web
+        if (snapped != v) { vol->setValue(snapped); return; }
+        music_.setVolume(snapped / 100.f);
+    });
+    connect(sfxOn, &QCheckBox::toggled, this, [this](bool on) {
+        audio_.setEnabled(on);
+        syncSoundButton();
+        sfx("click");
+    });
+    auto *act = new QWidgetAction(menu);
+    act->setDefaultWidget(box);
+    menu->addAction(act);
+    menu->popup(musicBtn_->mapToGlobal(QPoint(0, musicBtn_->height())));
 }
 
 QPushButton *MainWindow::makeShopItem(int type, int index) {
@@ -643,6 +693,7 @@ void MainWindow::tick() {
     if (!paused())
         for (int i = 0; i < speed_; i++) game_.update(dt);
     runAutopilot();
+    music_.follow(game_.phase);   // idempotent: acts only when the phase changes
     board_->update();
     syncUi();
 }
@@ -924,6 +975,9 @@ void MainWindow::keyPressEvent(QKeyEvent *e) {
     case Qt::Key_A:   // autopilot
         if (!e->isAutoRepeat()) { sfx("click"); setAuto(!auto_); }
         return;
+    case Qt::Key_M:   // music on/off (same key and toast as the web)
+        if (!e->isAutoRepeat()) toggleMusic();
+        return;
     default:
         break;
     }
@@ -956,6 +1010,7 @@ void MainWindow::syncSoundButton() {
     const bool on = audio_.enabled();
     soundBtn_->setText(on ? QStringLiteral("🔊") : QStringLiteral("🔇"));
     soundBtn_->setToolTip(on ? "Sound on" : "Sound off");
+    if (musicBtn_) setProp(musicBtn_, "on", music_.enabled());
 }
 
 // ---------- overlays ----------

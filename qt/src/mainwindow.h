@@ -5,6 +5,7 @@
 #include "audio.h"
 #include "autopilot.h"
 #include "game.h"
+#include "music.h"
 
 #include <QElapsedTimer>
 #include <QMainWindow>
@@ -64,6 +65,8 @@ private:
     void setUserPaused(bool on);
     void setSpeed(int s);
     void syncSoundButton();
+    void showMusicMenu();          // 🎵: Music, Music volume, Sound effects (same rows as the web)
+    void toggleMusic();            // M key / the Music row: on <-> off, with a toast
     void showEnd(bool won);
     void showMapCleared();
     void goToNextMap();
@@ -76,12 +79,14 @@ private:
 
     Game game_;
     Audio audio_;
+    Music music_;
     Autopilot autopilot_{game_};   // the 🤖 AI player (declared after game_, which it uses)
     BoardWidget *board_ = nullptr;
 
     // Header
     QLabel *map_ = nullptr, *coins_ = nullptr, *lives_ = nullptr, *wave_ = nullptr;
-    QPushButton *autoBtn_ = nullptr, *speedBtn_ = nullptr, *pauseBtn_ = nullptr, *soundBtn_ = nullptr;
+    QPushButton *autoBtn_ = nullptr, *speedBtn_ = nullptr, *pauseBtn_ = nullptr, *soundBtn_ = nullptr,
+                *musicBtn_ = nullptr;
 
     // Autopilot state
     bool auto_ = false;
