@@ -11,6 +11,8 @@ const http = require('http'), fs = require('fs'), path = require('path');
 const argv = process.argv.slice(2);
 const rootArg = argv.indexOf('--root');
 const ROOT = path.resolve(rootArg >= 0 ? argv[rootArg + 1] : path.join(__dirname, '..'));
+const urlArg = argv.indexOf('--url');   // --url https://host/path : test a deployed site (GET only)
+const LIVE = urlArg >= 0 ? argv[urlArg + 1].replace(/\/+$/, '') : null;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.mp3': 'audio/mpeg', '.svg': 'image/svg+xml' };
 const server = http.createServer((q, r) => {
   let p = decodeURIComponent(new URL(q.url, 'http://x').pathname); if (p === '/') p = '/index.html';
@@ -28,11 +30,15 @@ async function click(cdp, x, y) {
 }
 
 (async () => {
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const base = 'http://127.0.0.1:' + server.address().port;
-  const audioFiles = fs.readdirSync(path.join(ROOT, 'audio')).filter((n) => /\.(mp3|json)$/i.test(n));
+  if (!LIVE) await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = LIVE || 'http://127.0.0.1:' + server.address().port;
+  let audioFiles;
+  if (LIVE) {   // the audio files the deployed music.json names (read-only GET)
+    const mj = await fetch(base + '/audio/music.json').then((r) => r.json());
+    audioFiles = ['music.json'].concat(['build', 'wave', 'win', 'lose'].map((k) => mj[k] && mj[k].file).filter(Boolean));
+  } else audioFiles = fs.readdirSync(path.join(ROOT, 'audio')).filter((n) => /\.(mp3|json)$/i.test(n));
   const { cdp, errors, close } = await openPage(base + '/index.html');
-  console.log('root: ' + ROOT);
+  console.log(LIVE ? 'LIVE site: ' + base + ' (read-only; offline = the browser\'s network switched off)' : 'root: ' + ROOT);
   check(await waitFor(cdp, "navigator.serviceWorker && navigator.serviceWorker.controller !== null || (navigator.serviceWorker.ready.then(() => true), false)", 1000) || true, 'service worker API present');
   await cdp.eval("navigator.serviceWorker.ready.then(() => 1)");
   await cdp.send('Page.reload'); await sleep(1500);   // now controlled by the service worker
@@ -41,8 +47,13 @@ async function click(cdp, x, y) {
   check(audioFiles.every((n) => cached.includes(n)), 'the cache holds every audio file (' + audioFiles.join(', ') + ')', cached);
 
   // Offline = the server is gone (as in pwa-check.js). Everything must now come from the service worker's cache.
-  if (server.closeAllConnections) server.closeAllConnections();
-  await new Promise((r) => server.close(r));
+  if (LIVE) {   // the live server can't be stopped: switch the browser's network off instead
+    await cdp.send('Network.enable');
+    await cdp.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+  } else {
+    if (server.closeAllConnections) server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  }
   const loaded = new Promise((r) => cdp.on((m) => m === 'Page.loadEventFired' && r()));
   await cdp.send('Page.reload', { ignoreCache: false });
   await Promise.race([loaded, sleep(8000)]); await sleep(800);

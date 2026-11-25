@@ -13,6 +13,9 @@ ensureWebSocket(__filename);
 const http = require('http'), fs = require('fs'), path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
+// --url https://host/path : test a DEPLOYED site instead of web/ (only GET requests; the browser profile is a throwaway)
+const argv0 = process.argv.slice(2), urlIdx = argv0.indexOf('--url');
+const LIVE = urlIdx >= 0 ? argv0[urlIdx + 1].replace(/\/+$/, '') : null;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.mp3': 'audio/mpeg', '.svg': 'image/svg+xml' };
 const server = http.createServer((q, r) => {
   let p = decodeURIComponent(new URL(q.url, 'http://x').pathname); if (p === '/') p = '/index.html';
@@ -39,10 +42,11 @@ async function waitFor(cdp, expr, ms = 6000) { const t = Date.now(); for (;;) { 
 const audioFetches = `performance.getEntriesByType('resource').filter((e) => /\\/audio\\//.test(e.name)).map((e) => e.name.split('/').pop())`;
 
 (async () => {
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const base = 'http://127.0.0.1:' + server.address().port;
-  const hasAudio = fs.existsSync(path.join(ROOT, 'audio', 'music.json'));
-  check(hasAudio, 'web/audio/music.json exists (placeholders: node tools/make-music-placeholders.js; or Dale\'s real files)');
+  if (!LIVE) await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = LIVE || 'http://127.0.0.1:' + server.address().port;
+  if (LIVE) console.log('LIVE site: ' + base + ' (read-only)');
+  const hasAudio = LIVE ? (await fetch(base + '/audio/music.json').then((r) => r.ok, () => false)) : fs.existsSync(path.join(ROOT, 'audio', 'music.json'));
+  check(hasAudio, (LIVE ? base + '/' : 'web/') + 'audio/music.json exists (a missing local one: Dale\'s real files)');
   if (!hasAudio) { server.close(); process.exit(1); }
 
   // ---------- before the first gesture ----------
@@ -185,12 +189,23 @@ const audioFetches = `performance.getEntriesByType('resource').filter((e) => /\\
 
   // ---------- offline list ----------
   step('offline');
-  const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
-  const files = fs.readdirSync(path.join(ROOT, 'audio')).filter((n) => /\.(mp3|json)$/i.test(n));
+  let sw, files;
+  if (LIVE) {   // the deployed sw.js, and the audio files its music.json names
+    sw = await fetch(base + '/sw.js').then((r) => r.text());
+    const mj = await fetch(base + '/audio/music.json').then((r) => r.json());
+    files = ['music.json'].concat(['build', 'wave', 'win', 'lose'].map((k) => mj[k] && mj[k].file).filter(Boolean));
+    for (const n of files) {   // each one is really served (HEAD, no body) as audio
+      const h = await fetch(base + '/audio/' + n, { method: 'HEAD' });
+      check(h.ok && (n.endsWith('.json') ? /json/.test(h.headers.get('content-type') || '') : /audio\/mpeg/.test(h.headers.get('content-type') || '')), 'live: audio/' + n + ' is served with the right type', { status: h.status, type: h.headers.get('content-type') });
+    }
+  } else {
+    sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+    files = fs.readdirSync(path.join(ROOT, 'audio')).filter((n) => /\.(mp3|json)$/i.test(n));
+  }
   const missing = files.filter((n) => !sw.includes('"audio/' + n + '"'));
   check(files.length >= 5 && missing.length === 0, 'sw.js lists every audio file for offline play (run tools/make-sw-list.sh)', missing);
 
-  server.close();
+  if (!LIVE) server.close();
   console.log(failures ? `\nMUSIC CHECK FAILED (${failures})` : '\nMUSIC CHECK PASSED');
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });

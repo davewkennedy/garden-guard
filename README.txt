@@ -36,8 +36,9 @@ changes such as the phone layouts and the backlog of save-slot ideas.
 The history before this repository existed was rebuilt from dated folder
 copies and snapshots, so the early commits show the real order of work:
 the original HTML prototype -> Qt port -> Garden Guard+ -> Garden Guard++
--> the web port. The "immersive" branch holds an alternative visual
-direction (the garden continues past the board).
+-> the web port -> the "immersive" look: the garden continues past the
+board and fills the whole screen. That is the version the live site runs
+and what this branch holds; main keeps the original framed board.
 
 ------------------------------------------------------------------------------
 MUSIC AND SOUND
