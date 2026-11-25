@@ -1412,6 +1412,22 @@ var Renderer = (function () {
 
     // Boss HP bar, drawn in screen space (CSS px) at the bottom of the visible board,
     // so it stays put and readable when zoomed in.
+    // House health bar: lives left out of START_LIVES, always shown above the house, styled like the
+    // bugs' HP bars (dark backing; green > 50%, yellow > 25%, red below). Lives carry over between maps.
+    function drawHouseBar(p, g) {
+        var pts = g.path;
+        if (!pts || !pts.length) return;
+        var last = pts[pts.length - 1];
+        var hx = Math.min(W - TILE * 0.72, last.x), hy = last.y - 6;   // same spot as the house in buildBackground
+        var ratio = clamp01(g.lives / Math.max(1, DATA_().START_LIVES));
+        var bw = 46 * FX_UI, bh = 6 * FX_UI;
+        var bx = hx - bw / 2, by = Math.max(2, hy - 30 - bh);
+        p.fillStyle = rgba(20, 20, 20, 0.65);
+        p.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+        p.fillStyle = ratio > 0.5 ? '#5ee35e' : ratio > 0.25 ? '#ffd24d' : '#ff5a4d';
+        p.fillRect(bx, by, bw * ratio, bh);
+    }
+
     function drawBossBar(p, g, rect) {
         var bosses = g.enemies.filter(function (e) { return e.alive && edef(e).boss; });
         if (!bosses.length) return;
@@ -1640,6 +1656,7 @@ var Renderer = (function () {
         drawEffects(ctx, game);
         drawWeather(ctx, game);
         drawFireflies(ctx, game);
+        drawHouseBar(ctx, game);
         ctx.restore();
 
         // Screen-space overlays (CSS px).
