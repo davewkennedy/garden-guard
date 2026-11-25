@@ -20,6 +20,12 @@ try:
         files.append(icon['src'])
 except Exception:
     pass
+# Music (js/music.js loads these with fetch(), so index.html doesn't name them): cache every audio file too,
+# or the game would play without music when offline. README.txt in audio/ is not game data.
+if os.path.isdir('audio'):
+    for name in sorted(os.listdir('audio')):
+        if name.lower().endswith(('.mp3', '.json', '.m4a', '.ogg', '.wav')):
+            files.append('audio/' + name)
 seen, out = set(), []
 for f in files:
     if f in seen: continue
