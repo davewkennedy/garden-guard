@@ -32,7 +32,7 @@ const UI = (() => {
 
   // ---------- small helpers ----------
   function sfx(name) { try { if (typeof Sfx !== 'undefined') Sfx.play(name); } catch (e) { /* no audio */ } }
-  function music(fn, arg) { try { if (typeof Music !== 'undefined') Music[fn](arg); } catch (e) { /* no audio */ } }
+  function music(fn, arg, arg2) { try { if (typeof Music !== 'undefined') Music[fn](arg, arg2); } catch (e) { /* no audio */ } }
   function setText(el, s) { if (el.textContent !== s) el.textContent = s; }
   function setHtml(el, s) { if (el._html !== s) { el._html = s; el.innerHTML = s; } }
   function show(el, on) { el.classList.toggle('hidden', !on); }
@@ -297,7 +297,10 @@ const UI = (() => {
   function sync() {
     const over = game.isOver();
     if (over) { view.placing = -1; view.selectedId = -1; }
-    music('setPhase', game.phase === Phase().Wave ? 'wave' : 'build');   // the music follows the phase (a cheap compare)
+    // The music follows the map and the phase (a cheap compare). Menus (the intro and the map list) play Sunny
+    // Meadow's build loop whatever map sits behind them; Qt does the same (MainWindow::tick).
+    const menu = isOpen('ovIntro') || isOpen('ovMapSelect');
+    music('follow', menu ? 0 : game.mapIndex, game.phase === Phase().Wave && !menu ? 'wave' : 'build');
 
     setStat($('statMap'), `🗺️ ${game.map().name} (${game.mapIndex + 1}/${game.totalMaps})`);
     setStat($('statCoins'), `${COIN} ${game.coins}`);

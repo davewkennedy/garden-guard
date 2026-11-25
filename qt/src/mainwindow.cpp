@@ -699,7 +699,11 @@ void MainWindow::tick() {
     if (!paused())
         for (int i = 0; i < speed_; i++) game_.update(dt);
     runAutopilot();
-    music_.follow(game_.phase);   // idempotent: acts only when the phase changes
+    // The music follows the map and the phase (both idempotent). Menus (the intro and the map list) play Sunny
+    // Meadow's build loop whatever map sits behind them, as on the web (ui.js sync()).
+    const bool menu = intro_->isVisible() || (mapSelect_ && mapSelect_->isVisible());
+    music_.setMap(menu ? 0 : game_.mapIndex);
+    music_.follow(menu && game_.phase == Phase::Wave ? Phase::Build : game_.phase);
     board_->update();
     syncUi();
 }

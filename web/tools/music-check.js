@@ -99,6 +99,39 @@ const audioFetches = `performance.getEntriesByType('resource').filter((e) => /\\
   held = await ev2('Music.state()');
   check(!held.held && held.duck > 0.9 && held.playing === 'build', 'release() (a new run) brings the build loop back up', held);
 
+  // ---------- maps: every map picks its own loops (Dale) ----------
+  step('maps: each map plays its own build and wave loop');
+  const maps = meta.maps || [];
+  check(maps.length === 10, 'music.json lists 10 maps', maps.length);
+  const played = new Set();
+  let maxLoaded = 0;
+  for (let i = 0; i < 10; i++) {
+    const m = maps[i] || {};
+    const names = await ev2(`[Music.loopName(${i}, 'build'), Music.loopName(${i}, 'wave')]`);
+    check(names[0] === m.build && names[1] === m.wave && meta[m.build] && meta[m.wave],
+      `map ${i + 1} (${m.title}): the player's loops ${names.join('/')} are music.json's`, { names, m });
+    await ev2(`UI.startRunAt(${i}); ['ovIntro','ovMapSelect','ovBugs'].forEach((id) => UI.closeCard(id)); 1`);
+    const b = await waitFor(cdp, `Music.state().playing === ${JSON.stringify(m.build)}`, 8000);
+    if (b) played.add(m.build);
+    await ev2("GG.game.coins = 999; GG.game.startWave(); 1");
+    const w = await waitFor(cdp, `Music.state().playing === ${JSON.stringify(m.wave)}`, 8000);
+    if (w) played.add(m.wave);
+    check(b && w, `map ${i + 1} (${m.title}): build plays ${m.build}, a wave plays ${m.wave}`, await ev2('Music.state()'));
+    await ev2("GG.game.phase = 'Build'; 1");
+    await waitFor(cdp, `Music.state().playing === ${JSON.stringify(m.build)}`, 4000);
+    await sleep(1900);   // the crossfade ends and the previous map's buffers are dropped
+    maxLoaded = Math.max(maxLoaded, (await ev2('Music.state()')).loaded.length);
+  }
+  check(played.size === 20, `every map picks its own track: ${played.size} different loops played (want 20)`, [...played]);
+  check(maxLoaded <= 6, `only the current map's loops, the menu loop and the stingers stay decoded (at most ${maxLoaded} buffers)`);
+  await ev2("UI.openCard('ovMapSelect'); 1");
+  check(await waitFor(cdp, "Music.state().playing === 'build'", 4000), 'the map list (a menu) plays Sunny Meadow\'s build loop', await ev2('Music.state()'));
+  await ev2("UI.closeCard('ovMapSelect'); 1");
+  check(await waitFor(cdp, `Music.state().playing === ${JSON.stringify(maps[9] && maps[9].build)}`, 4000),
+    'closing it crossfades back to the map\'s own loop', await ev2('Music.state()'));
+  await ev2("UI.startRunAt(0); ['ovIntro','ovMapSelect','ovBugs'].forEach((id) => UI.closeCard(id)); 1");
+  check(await waitFor(cdp, "Music.state().playing === 'build'", 4000), 'back on Sunny Meadow: its build loop');
+
   // ---------- settings: separate from the sound effects, saved ----------
   step('settings');
   await ev2("Sfx.muted = true; 1");
