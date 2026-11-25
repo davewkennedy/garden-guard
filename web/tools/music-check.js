@@ -152,6 +152,21 @@ const audioFetches = `performance.getEntriesByType('resource').filter((e) => /\\
   await ev3("Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); 1");
   check(await waitFor(cdp, "Music.state().ctx === 'running'", 3000), 'and resumes when it is shown again');
   check(errors.length === 0, 'no console errors on this page', errors);
+
+  // ---------- a fade cut short must not jump (Dale's finding) ----------
+  step('fade cut short');
+  const reloaded2 = new Promise((r) => cdp.on((m) => m === 'Page.loadEventFired' && r()));
+  await cdp.send('Page.reload', { ignoreCache: true });
+  await Promise.race([reloaded2, sleep(8000)]); await sleep(500);
+  await ev3("localStorage.setItem('ggweb:music', '1'); 1");
+  await ev3("Music.setEnabled(true); 1");
+  await click(cdp, 60, 300);
+  await waitFor(cdp, "Music.state().playing === 'build'");
+  await sleep(500);                                   // the first fade-in (1.5 s) is part-way
+  const g0 = (await ev3('Music.state()')).curGain;
+  await ev3("Music.setEnabled(false); 1");            // turn off in the middle of that fade-in
+  const g1 = (await ev3('Music.state()')).lastFadeFrom;
+  check(g0 > 0 && g0 < 0.9 && g1 !== null && Math.abs(g1 - g0) < 0.25 && g1 < 0.9, 'turning music off during the fade-in fades out from the CURRENT gain, not from full level', { g0, g1 });
   close();
 
   // ---------- small phones: the 7 header icons fit ----------

@@ -52,6 +52,7 @@ var Music = (function () {
   var preloadStarted = false;
   var held = false;                     // a Won/Lost stinger keeps the loop ducked until release()
   var stingerUntil = 0;                 // ctx time when the current stinger ends (0 = none)
+  var lastFadeFrom = null;              // the gain the last fade OUT started from (tests: no jump when a fade is cut short)
 
   function running() { return !!ctx && ctx.state === 'running'; }
   function gainFor(x) { return BASE_GAIN * x; }
@@ -112,17 +113,20 @@ var Music = (function () {
   }
 
   // ---------- loops ----------
-  function curve(up) {   // equal-power fade curve
+  function curve(up, level) {   // equal-power fade curve, scaled to start (down) or end (up) at `level`
     var n = 32, a = new Float32Array(n);
-    for (var i = 0; i < n; i++) { var x = i / (n - 1); a[i] = up ? Math.sin(x * Math.PI / 2) : Math.cos(x * Math.PI / 2); }
+    for (var i = 0; i < n; i++) { var x = i / (n - 1); a[i] = (up ? Math.sin(x * Math.PI / 2) : Math.cos(x * Math.PI / 2)) * level; }
     return a;
   }
+  // A fade out starts from the gain the loop has RIGHT NOW (it may still be fading in or crossfading), so there
+  // is no jump or click; a fade in always starts from silence (new loops).
   function fade(gainNode, up, t0, dur) {
-    var g = gainNode.gain;
+    var g = gainNode.gain, v = up ? 1 : Math.max(0, Math.min(1, g.value));
+    if (!up) lastFadeFrom = v;   // for tests
     try {
       g.cancelScheduledValues(t0);
-      g.setValueAtTime(up ? 0 : 1, t0);
-      g.setValueCurveAtTime(curve(up), t0, dur);
+      g.setValueAtTime(up ? 0 : v, t0);
+      g.setValueCurveAtTime(curve(up, v), t0, dur);
     } catch (e) { g.setValueAtTime(up ? 1 : 0, t0 + dur); }
   }
   function startLoop(name, fadeIn) {
@@ -246,7 +250,7 @@ var Music = (function () {
     state: function () {   // for tests and the console
       return { enabled: enabled, volume: volume, ctx: ctx ? ctx.state : null, want: want, playing: cur ? cur.name : null,
         loaded: Object.keys(buffers), lost: Object.keys(lost), failed: failed, held: held, stingerUntil: stingerUntil,
-        duck: duck ? duck.gain.value : null, master: master ? master.gain.value : null,
+        duck: duck ? duck.gain.value : null, master: master ? master.gain.value : null, curGain: cur ? cur.gain.gain.value : null, lastFadeFrom: lastFadeFrom,
         loopWindow: cur && buffers[cur.name] ? windowOf(cur.name, buffers[cur.name]) : null };
     },
     _tracks: TRACKS,
