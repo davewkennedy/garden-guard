@@ -2,7 +2,7 @@
 // has been opened over https it also plays with no signal.
 // FILES and CACHE are generated: run `bash tools/make-sw-list.sh` after changing the game. It lists every
 // file index.html loads and sets CACHE to a content hash, so phones pick up each new version.
-const CACHE = 'ggweb-3b390b7b40';
+const CACHE = 'ggweb-86af32bdc0';
 const FILES = [
   "./",
   "index.html",
@@ -16,6 +16,7 @@ const FILES = [
   "js/data.js",
   "js/game.js",
   "js/audio.js",
+  "js/music.js",
   "js/view.js",
   "js/renderer.js",
   "js/autopilot.js",
@@ -27,6 +28,11 @@ const FILES = [
   "js/scenes.js",
   "js/main.js",
   "icon-512.png",
+  "audio/music-build.mp3",
+  "audio/music-wave.mp3",
+  "audio/music.json",
+  "audio/stinger-lose.mp3",
+  "audio/stinger-win.mp3",
 ];
 
 self.addEventListener('install', event => {

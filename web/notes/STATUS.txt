@@ -118,3 +118,13 @@ FEATURE FREEZE 15:40 · final regression on dist 15:42-15:48 · reports by 15:48
   "Bug spray: damage everything on screen". Real-money purchases deferred: needs payments + a server
   (localStorage saves are easy to cheat), native wrappers for app-store purchases (15-30% fee), legal/tax,
   and balance risk (maps are tuned to be winnable without help).
+
+- USER FEEDBACK (Carla, Samsung phone, 2026-11-22): from ~map 6 the tiles get small, and the first tap ZOOMS instead of planting ("tiny-tile auto-zoom", MIN_TILE_PX=28 in input.js), which felt like "can't place plants". Fix ideas (web only; Qt has no touch auto-zoom):
+  (1) one-time toast on the first auto-zoom: "Zoomed in so you can tap precisely: tap again to plant (or press and hold to plant directly)";
+  (2) mention it in the intro touch tips;
+  (3) consider lowering the auto-zoom threshold on phones.
+  Do it in a NEW folder copy (new-folder method); David uploads to /gardenplus.
+- USER IDEAS (Carla, 2026-11-22), SAVES:
+  (a) save mid-garden: auto-save after every wave (Build phase) + "Save & quit" when paused (today's checkpoint only saves at map start);
+  (b) multiple save slots (e.g. "Carla"/"Dave", easy/hard runs), each with its own map/wave/plants/lives/coins/difficulty;
+  (c) continue on another device. Suggested path: slots + per-wave saves first, then an export/import "transfer code"/QR (no server), later an optional sync-code server on David's host or full accounts (overlaps with the IAP/server idea). Keep Qt in sync where it applies (Qt has no resume yet).

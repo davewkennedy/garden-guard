@@ -36,7 +36,7 @@
       <button class="iconBtn" id="btnAuto" title="Autopilot: the AI plays the whole campaign at 2× (A)">🤖</button>
       <button class="iconBtn" id="btnSpeed" title="Fast forward (F)">1×</button>
       <button class="iconBtn" id="btnPause" title="Pause (Space)">⏸</button>
-      <button class="iconBtn" id="btnSound" title="Sound">🔊</button>
+      <button class="iconBtn" id="btnSound" title="Sound and music settings (M turns music on or off)" aria-haspopup="dialog" aria-expanded="false">🔊</button>
       <button class="iconBtn" id="btnFull" title="Full screen">⛶</button>
     </div>
   </header>
@@ -128,11 +128,18 @@
   </div></div>
 
   <div id="rotate"><div>📱↻</div><p>Turn your phone sideways to play</p></div>
+
+  <div id="soundPanel" class="popover hidden" role="dialog" aria-label="Sound settings">
+    <label class="prow"><input type="checkbox" id="chkMusic"> <span>Music</span></label>
+    <label class="prow vol"><span>Music volume</span> <input type="range" id="rngMusic" min="0" max="100" step="5" aria-label="Music volume"></label>
+    <label class="prow"><input type="checkbox" id="chkSfx"> <span>Sound effects</span></label>
+  </div>
 </div>
 
 <script src="js/data.js"></script>
 <script src="js/game.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/music.js"></script>
 <script src="js/view.js"></script>
 <script src="js/renderer.js"></script>
 <script src="js/autopilot.js"></script>
