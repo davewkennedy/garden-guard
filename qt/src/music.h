@@ -69,13 +69,17 @@ public:
     struct Slot {
         const Track *track = nullptr;
         size_t pos = 0;
-        Ramp fade;   // 0..1, output gain sin(level * pi/2): equal power against the other slot
+        Ramp fade;   // 0..1, output gain sin(level * pi/2): equal power against a lane fading out
     };
-    Slot lanes[2];          // lanes[cur] is the playing loop; the other one fades out
-    int cur = 0;
+    // lanes[cur] is the playing loop (cur -1: none). Every other lane is fading out and is only
+    // dropped once its level reaches 0, so a fade that's cut short never jumps (no click).
+    std::vector<Slot> lanes;
+    int cur = -1;
+    const Slot *playing() const { return cur >= 0 ? &lanes[size_t(cur)] : nullptr; }
     const Track *stinger = nullptr;
     size_t stingerPos = 0;
     bool restoreAfterStinger = false;
+    Ramp stingerFade{1, 1, 0};   // a stinger cut short by a new run fades out instead of stopping dead
     Ramp duck{1, 1, 0};
     Ramp master{0, 0, 0};
     float gain = 0;         // MUSIC_GAIN * volume (linear)

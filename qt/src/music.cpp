@@ -68,8 +68,9 @@ qint64 Source::readData(char *out, qint64 maxlen) {
             if (s.pos >= t.loopEnd) s.pos = t.loopStart;
         }
         if (stinger) {
-            if (stingerPos < stinger->pcm.size()) {
-                mix += stinger->pcm[stingerPos++];
+            const float sg = stingerFade.next();
+            if (stingerPos < stinger->pcm.size() && (sg > 0 || stingerFade.step != 0)) {
+                mix += stinger->pcm[stingerPos++] * sg;
             } else {
                 stinger = nullptr;
                 stingerDone = true;
@@ -80,9 +81,14 @@ qint64 Source::readData(char *out, qint64 maxlen) {
         peak = std::max(peak, std::abs(v));
         dst[i] = qint16(v * 32767);
     }
-    // Drop a slot that has faded out completely.
-    for (Slot &s : lanes)
-        if (s.fade.level <= 0 && s.fade.step == 0) s.track = nullptr;
+    // Drop lanes that have faded out completely (never the playing one); keep cur pointing at it.
+    for (int i = int(lanes.size()) - 1; i >= 0; i--) {
+        const Slot &s = lanes[size_t(i)];
+        if (i != cur && s.fade.level <= 0 && s.fade.step == 0) {
+            lanes.erase(lanes.begin() + i);
+            if (cur > i) cur--;
+        }
+    }
     return frames * qint64(sizeof(qint16));
 }
 
@@ -160,7 +166,7 @@ void Music::load(const QString &name, const QString &file, bool loop, size_t loo
         dec->deleteLater();
         f->deleteLater();
         // A loop that finished decoding after its phase began: start it now.
-        if (t.ready && loop && loopName_ == name && source_ && !source_->lanes[source_->cur].track) playLoop(name, true);
+        if (t.ready && loop && loopName_ == name && source_ && !source_->playing()) playLoop(name, true);
     });
     connect(dec, qOverload<QAudioDecoder::Error>(&QAudioDecoder::error), this, [dec, name](QAudioDecoder::Error) {
         qWarning("Garden Guard: cannot decode %s (%s), it stays silent", qPrintable(name), qPrintable(dec->errorString()));
@@ -226,20 +232,27 @@ void Music::playLoop(const QString &name, bool fresh) {
     if (!source_) return;
     auto it = tracks_.find(name);
     const Track *t = it != tracks_.end() && it->second.ready ? &it->second : nullptr;
-    Source::Slot &now = source_->lanes[source_->cur];
-    if (t && now.track == t && !fresh) return;   // already playing this loop
-    if (fresh || !now.track) {   // a fresh run (or nothing playing): straight in at bar 1
-        source_->lanes[source_->cur ^ 1] = Source::Slot{};
-        now = Source::Slot{t, t ? t->loopStart : 0, {}};
-        now.fade.to(1, 0);
-        return;
-    }
-    // Crossfade: the current loop fades out in the other slot, the new one fades in.
-    source_->cur ^= 1;
-    Source::Slot &in = source_->lanes[source_->cur];
-    in = Source::Slot{t, t ? t->loopStart : 0, {}};
-    in.fade.to(1, MUSIC_FADE_MS);
-    source_->lanes[source_->cur ^ 1].fade.to(0, MUSIC_FADE_MS);
+    if (!t) return;   // not decoded yet: load() starts it when it is
+    auto &lanes = source_->lanes;
+    const Source::Slot *now = source_->playing();
+    if (now && now->track == t && !fresh) return;   // already playing this loop
+    // Every lane fades out from wherever its level is now (a fade cut short never jumps).
+    // A fresh run fades the old music out quickly; a phase change crossfades over MUSIC_FADE_MS.
+    const int out = fresh ? MUSIC_DUCK_MS : MUSIC_FADE_MS;
+    for (Source::Slot &s : lanes) s.fade.to(0, out);
+    // Switching back to a loop that is still fading out: reverse its fade, keep its place.
+    if (!fresh)
+        for (size_t i = 0; i < lanes.size(); i++)
+            if (lanes[i].track == t) {
+                lanes[i].fade.to(1, MUSIC_FADE_MS);
+                source_->cur = int(i);
+                return;
+            }
+    // A new lane from bar 1. With nothing audible it comes in over MUSIC_DUCK_MS (no click at start).
+    const bool audible = std::any_of(lanes.begin(), lanes.end(), [](const Source::Slot &s) { return s.fade.level > 0; });
+    lanes.push_back(Source::Slot{t, t->loopStart, {}});
+    lanes.back().fade.to(1, fresh || !audible ? MUSIC_DUCK_MS : MUSIC_FADE_MS);
+    source_->cur = int(lanes.size()) - 1;
 }
 
 void Music::playStinger(const QString &name, bool restore) {
@@ -249,6 +262,7 @@ void Music::playStinger(const QString &name, bool restore) {
     if (it == tracks_.end() || !it->second.ready) return;
     source_->stinger = &it->second;
     source_->stingerPos = 0;
+    source_->stingerFade.to(1, 0);
     source_->restoreAfterStinger = restore;
     source_->duck.to(MUSIC_DUCK, MUSIC_DUCK_MS);
 }
@@ -263,9 +277,10 @@ void Music::follow(Phase phase) {
     switch (phase) {
     case Phase::Build:
     case Phase::Wave:
-        if (fromOver && source_) {   // a fresh map or run: undo the duck, start from bar 1
-            source_->stinger = nullptr;
-            source_->duck.to(1, prev == int(Phase::MapCleared) ? MUSIC_FADE_MS : 0);
+        if (fromOver && source_) {   // a fresh map or run: the stinger fades away, the duck comes back up
+            if (source_->stinger) source_->stingerFade.to(0, MUSIC_DUCK_MS);
+            source_->restoreAfterStinger = false;
+            source_->duck.to(1, prev == int(Phase::MapCleared) ? MUSIC_FADE_MS : MUSIC_DUCK_MS);
         }
         playLoop(phase == Phase::Build ? QStringLiteral("build") : QStringLiteral("wave"),
                  prev < 0 || prev == int(Phase::Won) || prev == int(Phase::Lost));

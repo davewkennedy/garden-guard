@@ -323,45 +323,50 @@ QWidget *MainWindow::buildHeader() {
     pauseBtn_->setToolTip("Pause (Space)");
     connect(speedBtn_, &QPushButton::clicked, this, [this] { sfx("click"); setSpeed(speed_ % 3 + 1); });
     connect(pauseBtn_, &QPushButton::clicked, this, [this] { sfx("click"); setUserPaused(!userPaused_); });
-    connect(soundBtn_, &QPushButton::clicked, this, [this] {
-        audio_.setEnabled(!audio_.enabled());
-        syncSoundButton();
-        sfx("click");   // only audible when turning sound on
-    });
-    musicBtn_ = button(QStringLiteral("🎵"), {}, "iconBtn");
-    musicBtn_->setToolTip("Music settings (M turns music on or off)");
-    connect(musicBtn_, &QPushButton::clicked, this, [this] { sfx("click"); showMusicMenu(); });
-    for (QPushButton *b : {speedBtn_, pauseBtn_, soundBtn_, musicBtn_}) h->addWidget(b);
+    // The one speaker button stands for sound effects AND music: it opens "Sound settings"
+    // (same rows and wording as the web's panel; Esc closes it).
+    connect(soundBtn_, &QPushButton::clicked, this, [this] { sfx("click"); showSoundMenu(); });
+    for (QPushButton *b : {speedBtn_, pauseBtn_, soundBtn_}) h->addWidget(b);
     return header;
 }
 
-// ---------- music (music.h; same rows and wording as the web's music panel) ----------
+// ---------- sound settings: music (music.h) and sound effects; parity with the web ----------
 
-void MainWindow::toggleMusic() {
+void MainWindow::toggleMusic() {   // the M key and the Music row
     music_.setEnabled(!music_.enabled());
-    setProp(musicBtn_, "on", music_.enabled());
+    syncSoundButton();
     board_->showToast(music_.enabled() ? QStringLiteral("🎵 Music on") : QStringLiteral("🎵 Music off"));
 }
 
-void MainWindow::showMusicMenu() {
+void MainWindow::showSoundMenu() {
     auto *menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->setAccessibleName("Sound settings");
     auto *box = new QWidget(menu);
-    auto *form = new QFormLayout(box);
-    auto *musicOn = new QCheckBox(box);
+    auto *rows = new QVBoxLayout(box);
+    auto *musicOn = new QCheckBox("Music", box);
     musicOn->setChecked(music_.enabled());
+    auto *volRow = new QHBoxLayout;
+    auto *volLabel = new QLabel("Music volume", box);
     auto *vol = new QSlider(Qt::Horizontal, box);
+    vol->setAccessibleName("Music volume");
     vol->setRange(0, 100);
     vol->setSingleStep(5);
     vol->setPageStep(5);
     vol->setValue(int(std::lround(music_.volume() * 100)));
-    vol->setMinimumWidth(140);
-    auto *sfxOn = new QCheckBox(box);
+    vol->setMinimumWidth(120);
+    vol->setEnabled(music_.enabled());   // as on the web: no volume while music is off
+    volRow->addWidget(volLabel);
+    volRow->addWidget(vol, 1);
+    auto *sfxOn = new QCheckBox("Sound effects", box);
     sfxOn->setChecked(audio_.enabled());
-    form->addRow("Music", musicOn);
-    form->addRow("Music volume", vol);
-    form->addRow("Sound effects", sfxOn);
-    connect(musicOn, &QCheckBox::toggled, this, [this](bool on) { if (on != music_.enabled()) toggleMusic(); });
+    rows->addWidget(musicOn);
+    rows->addLayout(volRow);
+    rows->addWidget(sfxOn);
+    connect(musicOn, &QCheckBox::toggled, this, [this, vol](bool on) {
+        if (on != music_.enabled()) toggleMusic();
+        vol->setEnabled(on);
+    });
     connect(vol, &QSlider::valueChanged, this, [this, vol](int v) {
         const int snapped = (v + 2) / 5 * 5;   // step 5, as on the web
         if (snapped != v) { vol->setValue(snapped); return; }
@@ -370,12 +375,13 @@ void MainWindow::showMusicMenu() {
     connect(sfxOn, &QCheckBox::toggled, this, [this](bool on) {
         audio_.setEnabled(on);
         syncSoundButton();
-        sfx("click");
+        sfx("click");   // only audible when turning sound effects on
     });
     auto *act = new QWidgetAction(menu);
     act->setDefaultWidget(box);
     menu->addAction(act);
-    menu->popup(musicBtn_->mapToGlobal(QPoint(0, musicBtn_->height())));
+    menu->popup(soundBtn_->mapToGlobal(QPoint(0, soundBtn_->height())));
+    musicOn->setFocus();
 }
 
 QPushButton *MainWindow::makeShopItem(int type, int index) {
@@ -1007,10 +1013,10 @@ void MainWindow::setSpeed(int s) {
 }
 
 void MainWindow::syncSoundButton() {
-    const bool on = audio_.enabled();
-    soundBtn_->setText(on ? QStringLiteral("🔊") : QStringLiteral("🔇"));
-    soundBtn_->setToolTip(on ? "Sound on" : "Sound off");
-    if (musicBtn_) setProp(musicBtn_, "on", music_.enabled());
+    // As on the web: 🔊 while sound effects or music are on, 🔇 only when both are off.
+    const bool any = audio_.enabled() || music_.enabled();
+    soundBtn_->setText(any ? QStringLiteral("🔊") : QStringLiteral("🔇"));
+    soundBtn_->setToolTip(QString(any ? "Sound settings" : "Sound off") + " (M turns music on or off)");
 }
 
 // ---------- overlays ----------

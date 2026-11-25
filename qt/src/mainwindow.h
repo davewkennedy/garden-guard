@@ -65,7 +65,7 @@ private:
     void setUserPaused(bool on);
     void setSpeed(int s);
     void syncSoundButton();
-    void showMusicMenu();          // 🎵: Music, Music volume, Sound effects (same rows as the web)
+    void showSoundMenu();          // the speaker: "Sound settings" (Music, Music volume, Sound effects), as on the web
     void toggleMusic();            // M key / the Music row: on <-> off, with a toast
     void showEnd(bool won);
     void showMapCleared();
@@ -85,8 +85,7 @@ private:
 
     // Header
     QLabel *map_ = nullptr, *coins_ = nullptr, *lives_ = nullptr, *wave_ = nullptr;
-    QPushButton *autoBtn_ = nullptr, *speedBtn_ = nullptr, *pauseBtn_ = nullptr, *soundBtn_ = nullptr,
-                *musicBtn_ = nullptr;
+    QPushButton *autoBtn_ = nullptr, *speedBtn_ = nullptr, *pauseBtn_ = nullptr, *soundBtn_ = nullptr;
 
     // Autopilot state
     bool auto_ = false;

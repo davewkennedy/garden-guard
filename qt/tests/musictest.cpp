@@ -13,6 +13,7 @@
 #include <QSettings>
 #include <QTimer>
 #include <cmath>
+#include <map>
 #include <cstdio>
 
 using namespace music;
@@ -42,7 +43,8 @@ static void seam() {
     s.open(QIODevice::ReadOnly);
     s.gain = 1;
     s.master.to(1, 0);
-    s.lanes[0] = Source::Slot{&t, t.loopStart, {}};
+    s.lanes = {Source::Slot{&t, t.loopStart, {}}};
+    s.cur = 0;
     s.lanes[0].fade.to(1, 0);
     const auto out = render(s, 3500);
     int bad = -1;
@@ -62,23 +64,23 @@ static void crossfade() {
     s.open(QIODevice::ReadOnly);
     s.gain = 1;
     s.master.to(1, 0);
-    s.lanes[0] = Source::Slot{&a, 0, {}};
+    s.lanes = {Source::Slot{&a, 0, {}}, Source::Slot{&b, 0, {}}};
     s.lanes[0].fade.to(1, 0);
     s.cur = 1;
-    s.lanes[1] = Source::Slot{&b, 0, {}};
     s.lanes[1].fade.to(1, MUSIC_FADE_MS);
     s.lanes[0].fade.to(0, MUSIC_FADE_MS);
     const int n = MUSIC_FADE_MS * RATE / 1000;
     double worst = 0;
     for (int i = 0; i < n; i += 441) {
         render(s, 441);
-        const float gi = std::sin(s.lanes[1].fade.level * 1.5707963f);
-        const float go = s.lanes[0].track ? std::sin(s.lanes[0].fade.level * 1.5707963f) : 0.f;
+        const float gi = std::sin(s.playing()->fade.level * 1.5707963f);
+        const float go = s.lanes.size() > 1 ? std::sin(s.lanes[0].fade.level * 1.5707963f) : 0.f;
         worst = std::max(worst, std::abs(double(gi * gi + go * go) - 1.0));
     }
     check(worst < 0.01, "crossfade is equal-power throughout MUSIC_FADE_MS", QString("worst |g1^2+g2^2-1| = %1").arg(worst));
     render(s, 4410);
-    check(!s.lanes[0].track && s.lanes[1].fade.level == 1.f, "after the crossfade only the new loop plays");
+    check(s.lanes.size() == 1 && s.playing()->track == &b && s.playing()->fade.level == 1.f,
+          "after the crossfade only the new loop plays");
 }
 
 // 3. Duck + stinger: the loop ducks to MUSIC_DUCK in MUSIC_DUCK_MS; after the stinger it comes back
@@ -94,7 +96,8 @@ static void duck() {
         s.open(QIODevice::ReadOnly);
         s.gain = 1;
         s.master.to(1, 0);
-        s.lanes[0] = Source::Slot{&loop, 0, {}};
+        s.lanes = {Source::Slot{&loop, 0, {}}};
+        s.cur = 0;
         s.lanes[0].fade.to(1, 0);
         s.stinger = &sting;
         s.restoreAfterStinger = restore;
@@ -120,7 +123,8 @@ static void offFade() {
     s.open(QIODevice::ReadOnly);
     s.gain = 1;
     s.master.to(1, 0);
-    s.lanes[0] = Source::Slot{&t, 0, {}};
+    s.lanes = {Source::Slot{&t, 0, {}}};
+    s.cur = 0;
     s.lanes[0].fade.to(1, 0);
     s.master.to(0, MUSIC_OFF_MS);
     const auto mid = render(s, MUSIC_OFF_MS * RATE / 2000);
@@ -210,16 +214,35 @@ static void followGame() {
     m.follow(Phase::Build);   // creates the mixer (lazily, as in the game)
     auto *s = m.source();
     if (!s) { check(false, "the mixer exists after the first follow()"); return; }
-    auto playing = [&]() -> const Track * { return s->lanes[s->cur].track; };
+    auto playing = [&]() -> const Track * { return s->playing() ? s->playing()->track : nullptr; };
+    auto fadingOut = [&](const Track *t) {
+        for (int i = 0; i < int(s->lanes.size()); i++)
+            if (i != s->cur && s->lanes[size_t(i)].track == t) return true;
+        return false;
+    };
     auto pump = [&](int ms) { render(const_cast<Source &>(*s), ms * RATE / 1000); };
-    check(playing() == m.track("build") && s->lanes[s->cur].pos == m.track("build")->loopStart,
-          "first Build: the build loop starts at once from bar 1 (loop_start)");
+    check(playing() == m.track("build") && s->playing()->pos == m.track("build")->loopStart,
+          "first Build: the build loop starts from bar 1 (loop_start), fading in over 200 ms");
+    pump(MUSIC_DUCK_MS + 20);
     m.follow(Phase::Build);   // idempotent
     m.follow(Phase::Wave);
-    check(playing() == m.track("wave") && s->lanes[s->cur ^ 1].track == m.track("build"),
+    check(playing() == m.track("wave") && fadingOut(m.track("build")),
           "Build -> Wave: the wave loop fades in while the build loop fades out");
     pump(MUSIC_FADE_MS + 100);
-    check(!s->lanes[s->cur ^ 1].track, "  ...and after MUSIC_FADE_MS only the wave loop is left");
+    check(s->lanes.size() == 1, "  ...and after MUSIC_FADE_MS only the wave loop is left");
+    // A flip back and forth inside the crossfade: no lane's level may jump (Bobby's web bug, 41044cc).
+    m.follow(Phase::Build);
+    pump(500);
+    std::map<const Track *, float> before;
+    for (const auto &l : s->lanes) before[l.track] = l.fade.level;
+    m.follow(Phase::Wave);
+    bool continuous = true;
+    for (const auto &l : s->lanes)
+        if (before.count(l.track) && std::abs(before[l.track] - l.fade.level) > 1e-6f) continuous = false;
+    check(continuous && s->lanes.size() == 2 && playing() == m.track("wave"),
+          "a flip inside the crossfade reverses the fades from where they are (no jump, no click)");
+    pump(MUSIC_FADE_MS + 100);
+    check(s->lanes.size() == 1 && playing() == m.track("wave"), "  ...and settles on the wave loop");
     m.follow(Phase::MapCleared);
     check(s->stinger == m.track("win") && s->restoreAfterStinger, "MapCleared: the win stinger, loop ducked");
     pump(MUSIC_DUCK_MS + 20);
@@ -228,16 +251,25 @@ static void followGame() {
     check(!s->stinger && s->duck.level == 1.f, "  ...stinger over (4.8 s): the loop is back up");
     m.follow(Phase::Build);   // the next map
     pump(MUSIC_FADE_MS + 100);
-    check(playing() == m.track("build"), "next map: back to the build loop");
+    check(playing() == m.track("build") && s->lanes.size() == 1, "next map: back to the build loop");
     m.follow(Phase::Wave);
     m.follow(Phase::Lost);
     check(s->stinger == m.track("lose") && !s->restoreAfterStinger, "Lost: the lose stinger, loop ducked");
     pump(3700 + MUSIC_FADE_MS + 200);
     check(std::abs(s->duck.level - MUSIC_DUCK) < 1e-3f, "  ...and it stays ducked after the stinger");
     m.follow(Phase::Build);   // play again
-    check(playing() == m.track("build") && s->lanes[s->cur].pos == m.track("build")->loopStart &&
-              !s->lanes[s->cur ^ 1].track && s->duck.level == 1.f,
-          "a new run: the build loop starts fresh from bar 1, undocked");
+    check(playing() == m.track("build") && s->playing()->pos == m.track("build")->loopStart,
+          "a new run: the build loop starts fresh from bar 1");
+    pump(MUSIC_DUCK_MS + 20);
+    check(s->duck.level == 1.f && s->lanes.size() == 1, "  ...undocked, and the old loop faded out in 200 ms");
+    // A new run while a stinger still plays: the stinger fades out (no dead stop).
+    m.follow(Phase::Wave);
+    m.follow(Phase::Lost);
+    pump(300);
+    m.follow(Phase::Build);
+    check(s->stinger && s->stingerFade.step < 0, "a new run during the stinger: the stinger fades out");
+    pump(MUSIC_DUCK_MS + 20);
+    check(!s->stinger, "  ...and is gone after 200 ms");
     m.follow(Phase::Wave);
     m.follow(Phase::Won);
     check(s->stinger == m.track("win") && !s->restoreAfterStinger, "Won: the win stinger, stays ducked");
