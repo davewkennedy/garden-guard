@@ -32,6 +32,7 @@ const UI = (() => {
 
   // ---------- small helpers ----------
   function sfx(name) { try { if (typeof Sfx !== 'undefined') Sfx.play(name); } catch (e) { /* no audio */ } }
+  function music(fn, arg) { try { if (typeof Music !== 'undefined') Music[fn](arg); } catch (e) { /* no audio */ } }
   function setText(el, s) { if (el.textContent !== s) el.textContent = s; }
   function setHtml(el, s) { if (el._html !== s) { el._html = s; el.innerHTML = s; } }
   function show(el, on) { el.classList.toggle('hidden', !on); }
@@ -94,8 +95,40 @@ const UI = (() => {
   function soundOn() { return typeof Sfx === 'undefined' ? false : !Sfx.muted; }
   function syncSoundButton() {
     const on = soundOn();
-    $('btnSound').textContent = on ? '🔊' : '🔇';
-    $('btnSound').title = on ? 'Sound on' : 'Sound off';
+    const any = on || musicOn();   // the one speaker button stands for sound effects AND music
+    $('btnSound').textContent = any ? '🔊' : '🔇';
+    $('btnSound').title = (any ? 'Sound settings' : 'Sound off') + ' (M turns music on or off)';
+    syncSoundPanel();
+  }
+
+  // ---------- music settings (separate from the sound effects) ----------
+  function musicOn() { return typeof Music !== 'undefined' && Music.enabled(); }
+  function syncSoundPanel() {
+    if (typeof Music === 'undefined') return;
+    $('chkMusic').checked = Music.enabled();
+    $('rngMusic').value = String(Math.round(Music.volume() * 100));
+    $('rngMusic').disabled = !Music.enabled();
+    $('chkSfx').checked = soundOn();
+  }
+  function placeSoundPanel() {
+    const b = $('btnSound').getBoundingClientRect(), p = $('soundPanel');
+    const w = p.offsetWidth || 230;
+    p.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, b.right - w)) + 'px';
+    p.style.top = Math.min(window.innerHeight - p.offsetHeight - 8, b.bottom + 6) + 'px';
+  }
+  function setSoundPanel(open) {
+    const p = $('soundPanel');
+    if (open) syncSoundPanel();
+    show(p, open);
+    $('btnSound').setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) { placeSoundPanel(); $('chkMusic').focus(); }
+  }
+  function soundPanelOpen() { return !$('soundPanel').classList.contains('hidden'); }
+  function toggleMusic() {   // the M key: music on/off
+    if (typeof Music === 'undefined') return;
+    Music.setEnabled(!Music.enabled());
+    syncSoundButton();
+    toast(Music.enabled() ? '🎵 Music on' : '🎵 Music off');
   }
   function setAuto(on) {
     st.auto = on;
@@ -264,6 +297,7 @@ const UI = (() => {
   function sync() {
     const over = game.isOver();
     if (over) { view.placing = -1; view.selectedId = -1; }
+    music('setPhase', game.phase === Phase().Wave ? 'wave' : 'build');   // the music follows the phase (a cheap compare)
 
     setStat($('statMap'), `🗺️ ${game.map().name} (${game.mapIndex + 1}/${game.totalMaps})`);
     setStat($('statCoins'), `${COIN} ${game.coins}`);
@@ -409,6 +443,7 @@ const UI = (() => {
         if (!e.repeat && view.selectedId >= 0 && !$('tpAim').classList.contains('hidden') && !$('tpAim').disabled) aimClick();
         return true;
       case 'a': case 'A': if (!e.repeat) { sfx('click'); setAuto(!st.auto); } return true;
+      case 'm': case 'M': if (!e.repeat) toggleMusic(); return true;
     }
     const n = k === '0' ? 9 : k === '-' ? 10 : (k >= '1' && k <= '9') ? Number(k) - 1 : -1;
     if (!e.repeat && n >= 0) { if (n < st.shopOrder.length) toggleShop(st.shopOrder[n]); return true; }
@@ -722,6 +757,7 @@ const UI = (() => {
     on('mapCleared', () => {
       awardStars();
       sfx('win');
+      music('stinger', 'win');
       celebrate();
       setTimeout(() => { if (game.phase === Phase().MapCleared) showMapCleared(); }, 1500);
     });
@@ -733,11 +769,12 @@ const UI = (() => {
       awardStars();
       clearCheckpoint();   // right away: the end card shows 1.8 s later
       sfx('win');
+      music('stinger', 'win');
       celebrate();
       setTimeout(celebrate, 900);
       setTimeout(() => { if (game.phase === Phase().Won) showEnd(true); }, 1800);
     });
-    on('lost', () => { sfx('lose'); showEnd(false); });
+    on('lost', () => { sfx('lose'); music('stinger', 'lose'); showEnd(false); });
   }
   function celebrate() { try { if (Renderer.celebrate) Renderer.celebrate(); } catch (e) { /* */ } }
 
@@ -748,11 +785,17 @@ const UI = (() => {
     click('btnAuto', () => { sfx('click'); setAuto(!st.auto); });
     click('btnSpeed', () => { sfx('click'); setSpeed(st.speed % 3 + 1); });
     click('btnPause', () => { sfx('click'); setUserPaused(!st.userPaused); });
-    click('btnSound', () => {
-      if (typeof Sfx !== 'undefined') Sfx.muted = !Sfx.muted;   // Sfx saves it (ggweb:sound)
-      syncSoundButton();
-      sfx('click');
+    // One speaker button for all sound: it opens a small panel (music on/off, music volume, sound effects on/off).
+    // (A separate 7th header icon would push the phone header below the 32 px tap size.)
+    click('btnSound', () => { music('unlock'); setSoundPanel(!soundPanelOpen()); });
+    $('chkMusic').addEventListener('change', (e) => { if (typeof Music !== 'undefined') Music.setEnabled(e.target.checked); syncSoundButton(); });
+    $('rngMusic').addEventListener('input', (e) => { if (typeof Music !== 'undefined') Music.setVolume(Number(e.target.value) / 100); });
+    $('chkSfx').addEventListener('change', (e) => { if (typeof Sfx !== 'undefined') Sfx.muted = !e.target.checked; syncSoundButton(); sfx('click'); });
+    document.addEventListener('pointerdown', (e) => {   // a tap outside the panel closes it
+      if (soundPanelOpen() && !$('soundPanel').contains(e.target) && !$('btnSound').contains(e.target)) setSoundPanel(false);
     });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && soundPanelOpen()) { setSoundPanel(false); $('btnSound').focus(); e.stopPropagation(); } }, true);
+    window.addEventListener('resize', () => { if (soundPanelOpen()) placeSoundPanel(); });
     click('btnFull', toggleFullscreen);
     click('btnZoomReset', () => { sfx('click'); if (View.reset) View.reset(); });
     click('sideToggle', () => {

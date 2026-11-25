@@ -9,6 +9,7 @@ OUT=dist/gardenguard-web
 rm -rf dist
 mkdir -p "$OUT"
 cp -r index.html manifest.json sw.js css js "$OUT"/
+[ -d audio ] && cp -r audio "$OUT"/     # music (loaded by js/music.js; also listed in sw.js for offline play)
 cp icon-*.png "$OUT"/
 [ -f README.txt ] && cp README.txt "$OUT"/
 python3 - "$OUT" <<'EOF'

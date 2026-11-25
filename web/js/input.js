@@ -35,6 +35,7 @@ const Input = (() => {
   // background, so try on every gesture; Sfx.unlock() returns at once when audio is running.
   function unlockAudio() {
     try { if (typeof Sfx !== 'undefined' && Sfx.unlock) Sfx.unlock(); } catch (e) { /* */ }
+    try { if (typeof Music !== 'undefined' && Music.unlock) Music.unlock(); } catch (e) { /* */ }   // same gesture rule
   }
 
   function hoverAt(x, y) {
