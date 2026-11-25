@@ -1943,7 +1943,22 @@ void Renderer::draw(QPainter &p, const Game &game, const View &view, double scal
     drawEffects(p, game);
     drawWeather(p, game);
     drawFireflies(p, game);
+    drawHouseBar(p, game);
     drawBossBar(p, game);
+}
+
+// House health bar: lives left out of START_LIVES, always shown above the house, styled like the
+// bugs' HP bars (dark backing; green > 50%, yellow > 25%, red below). Lives carry over between maps.
+void Renderer::drawHouseBar(QPainter &p, const Game &g) {
+    if (g.path.empty()) return;
+    const QPointF &last = g.path.back();
+    const double hx = std::min(W - TILE * 0.72, last.x()), hy = last.y() - 6;   // same spot as the house
+    const double ratio = clamp01(double(g.lives) / std::max(1, data::START_LIVES));
+    const double bw = 46 * FX_UI, bh = 6 * FX_UI;
+    const double bx = hx - bw / 2, by = std::max(2.0, hy - 30 - bh);
+    p.fillRect(QRectF(bx - 1, by - 1, bw + 2, bh + 2), rgba(20, 20, 20, 0.65));
+    p.fillRect(QRectF(bx, by, bw * ratio, bh),
+               QColor(ratio > 0.5 ? "#5ee35e" : ratio > 0.25 ? "#ffd24d" : "#ff5a4d"));
 }
 
 // Boss HP bar across the top of the board: name, then one segment per living boss.

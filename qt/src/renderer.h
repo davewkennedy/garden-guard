@@ -61,6 +61,7 @@ private:
     void drawShots(QPainter &p, const Game &g);
     void drawEffects(QPainter &p, const Game &g);
     void drawBossBar(QPainter &p, const Game &g);   // big HP bar while a boss is alive
+    void drawHouseBar(QPainter &p, const Game &g);  // lives left, above the house
     void drawFireflies(QPainter &p, const Game &g);
     void drawWeather(QPainter &p, const Game &g);   // season snow / leaves / petals
     void drawFirePoints(QPainter &p, const Game &g, const View &view);
